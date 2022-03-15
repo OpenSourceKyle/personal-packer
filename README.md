@@ -17,7 +17,7 @@ Either inside of the Packer controller container (`./1_run_packer_controller.sh`
 packer build .
 
 # Debug mode
-PACKER_LOG=1 packer build -on-error=ask .
+PACKER_LOG=1 packer build -var="dont_display_gui=false" -on-error=ask .
 
 # Overwrite pre-set variable via CLI arg in key=value format:
 ### ACTION: Do NOT perform full system upgrade after installation (to minimize build time)
