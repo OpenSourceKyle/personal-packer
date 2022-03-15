@@ -23,7 +23,7 @@ PACKER_LOG=1 packer build -var="dont_display_gui=false" -on-error=ask .
 ### NOTE: this works by overwriting the system update command to a 'nop' command 
 ### NOTE: this cannot be an empty string or the build will fail (at the very end!)
 ### NOTE: the arg must be in variables.pkr.hcl
-packer build -var="full_system_upgrade_command_debian_kali='echo do not update'" .
+packer build -var="full_system_upgrade_command_debian_kali=echo do not update" .
 ```
 
 ## Sample Build Times
@@ -37,7 +37,7 @@ Packer runs fairly quickly, depending on if updates or large packages are instal
 _this time will largely depend on how out-of-date the ISO is versus the current rolling distro state_
 
 #### Without full system upgrade
-* 17 minutes 47 seconds
+* 27 minutes 14 seconds
 
 # Troubleshooting Common Issues:
 
@@ -65,9 +65,10 @@ PACKER_LOG=1 packer build .
 
 * [Packer Docs](https://www.packer.io/docs)
 
-Packer templates can be useful examples, and there are many such templates on the Internet. During my experimentation with using them, I learned the difficult way that many do not work "out-of-the-box" and using the Packer documentation was much simpler than a poorly documented, old template. Be cautious for a few reasons:
+## Packer Templates 
+Templates can be useful examples, and there are many such templates on the Internet. During my experimentation with using many of them, I learned the hard way that many do not work "out-of-the-box" and using the Packer documentation was much simpler than a poorly documented, old template. Be cautious for a few reasons:
 - some templates use the old template format in JSON instead of the newer HCL format
-- some templates might not work without a lot of variable configuration (because the templates are parameterized so heavily)
+- some templates might not work without a lot of variable configuration (because the templates are heavily parameterized)
 - some templates might not work because they are simply out-of-date with newer packer versions
 
 * [Unofficial Packer Templates](https://github.com/chef/bento/tree/main/packer_templates)
