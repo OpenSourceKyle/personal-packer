@@ -1,0 +1,14 @@
+*.iso
+*lock
+*.swp
+output-*
+packer_cache
+YOUR_BUILT_VM*
+*.vm*
+*.nvram
+default_vsphere_creds.auto.pkrvars.hcl
+*.md.backup
+*ssh/
+id_*
+known_hosts
+authorized_keys

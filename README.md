@@ -1,92 +1,108 @@
-# packer
+# Packer
 
-Automate the building of VMs
+Remotely or locally build Virtual Machines from-scratch using 1-command.
 
-## Getting started
+### Disclaimer
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+In below usages,
+- **Local builds** are VMs that are created on the local, host computer. 
+  - These cannot be created inside of a VM or container (because these are built with the hypervisor binaries).
+- **Remote builds** are VMs that are created on a remote vSphere server.
+  - These can be built from inside of a VM or container (because these are built with the respective REST API).
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Pre-requisites
 
-## Add your files
+Please read "Disclaimer" above in regards to VM location (and required setup).
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+* Remote-only Builds\*\*:
+  * run Dockerized version via `./1_run_packer_controller.sh`
+> \*\* NOTE: only works for vSphere remote VMs ; local VMs will require Packer to be installed and ran from the host (i.e. not from within a VM or container)
 
+* Local (as well as Remote) Builds:
+  * Packer installation: [Packer Installation](https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
+  * Run `./run_first_time_setup.sh` once manually before running any `packer` commands
+
+---
+
+# Usage
+
+Either inside of the Packer controller container (`./1_run_packer_controller.sh`) or after installing Packer locally, run:
+
+```shell
+# Build all templates (local & remote)
+packer build .
+
+# Build only remote
+packer build -only="vsphere-iso.*" .
+# Build only local
+packer build -only="vmware-iso.*" .
+
+# Build only a particular template
+packer build -only="vsphere-iso.kali_2021" .
+packer build -only="vsphere-iso.debian_10" .
+packer build -only="vmware-iso.kali_2021" .
+packer build -only="vmware-iso.debian_10" .
+
+# Overwrite variable from CLI arg
+# NOTE: the arg must be defined in variables.pkr.hcl
+packer build -var="cpus=1" .
+
+# EXAMPLE of overwriting variable:
+### ACTION: Do NOT perform full system upgrade after installation (to minimize build time)
+### NOTE: this works by overwriting the system update command to a 'nop' command and
+### this cannot be an empty string or the build will fail (at the very end!)
+### NOTE: the arg must be and is defined in variables.pkr.hcl
+packer build -var="full_system_upgrade_command_debian_kali='whoami'" .
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/thebwitty/packer.git
-git branch -M main
-git push -uf origin main
+
+# Sample Build Times
+
+Packer runs fairly quickly, depending on if updates or large packages are installed or not. Below are some build times to give an estimate:
+
+## Kali 2021
+
+### With full system upgrade
+* 38 minutes 11 seconds
+
+### Without full system upgrade
+* 17 minutes 47 seconds
+
+## Debian 10
+
+Since Debian does not use rolling updates, the with and without full system upgrade times are the same:
+* 12 minutes 24 seconds
+
+---
+
+# Troubleshooting Common Issues:
+
+Some simple solutions to common problems.
+
+## Packer deletes the VM on a failure
+
+Packer deletes a VM by default on failure instead of asking. By keeping the VM (that will stay running as well), triage can be possible to troubleshoot a build failure.
+
+```shell
+# Add the argument `-on-error=ask` after the subcommand like:
+packer build -on-error=ask .
 ```
 
-## Integrate with your tools
+## Show debug output
 
-- [ ] [Set up project integrations](https://gitlab.com/thebwitty/packer/-/settings/integrations)
+Packer only has debug output, which is similar to setting a verbosity option (e.g. "-v" or "--verbose") in other programs.
 
-## Collaborate with your team
+```shell
+# Append `PACKER_DEBUG=1` environment variable to a packer run like:
+PACKER_DEBUG=1 packer build .
+```
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Automatically merge when pipeline succeeds](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+# References:
 
-## Test and Deploy
+* [Packer Docs](https://www.packer.io/docs)
 
-Use the built-in continuous integration in GitLab.
+Packer templates can be useful examples, and there are many such templates on the Internet. During my experimentation with using them, I learned the difficult way that many do not work "out-of-the-box" and using the Packer documentation was much simpler than a poorly documented, old template. Be cautious for a few reasons:
+- some templates use the old template format in JSON instead of the newer HCL format
+- some templates might not work without a lot of variable configuration (because the temaplates are parameterized so heavily)
+- some templates might not work because they are simply out-of-date with newer packer versions
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!).  Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+* [Unofficial Packer Templates](https://github.com/chef/bento/tree/main/packer_templates)
