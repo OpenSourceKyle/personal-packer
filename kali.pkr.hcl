@@ -46,7 +46,7 @@ build {
   }
   # Ensure SSH keys permissions are correct & passwordless sudo user exists
   provisioner "shell" {
-    inline = ["echo '${var.vm_password}' | sudo -S /bin/sh -c 'echo \"${var.vm_username} ALL=(ALL) NOPASSWD: ALL\" | tee -a /etc/sudoers.d/11_passwordless_sudo_user && chmod 440 /etc/sudoers.d/11_passwordless_sudo_user && visudo -c'", "chmod 700 ~/.ssh", "chmod 644 -R ~/.ssh/*", "chmod 600 ~/.ssh/id_rsa", "chmod g-w,o-w ~", "touch ~/VM_CREATED_ON_\"$(date +%Y-%m-%d_%H-%M-%S)\""]
+    inline = ["echo '${var.vm_password}' | sudo -S /bin/sh -c 'echo \"${var.vm_username} ALL=(ALL) NOPASSWD: ALL\" | tee /etc/sudoers.d/11_passwordless_sudo_user && chmod 440 /etc/sudoers.d/11_passwordless_sudo_user && visudo -c'", "chmod 700 ~/.ssh", "chmod 644 -R ~/.ssh/*", "chmod 600 ~/.ssh/id_rsa", "chmod g-w,o-w ~", "touch ~/VM_CREATED_ON_\"$(date +%Y-%m-%d_%H-%M-%S)\""]
   }
   # Perform full system update/upgrade
   # NOTE: this will take some time on rolling-updates OSes

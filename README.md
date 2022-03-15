@@ -10,13 +10,12 @@ Locally build Virtual Machines from-scratch using 1-command.
 
 # Usage
 
-Either inside of the Packer controller container (`./1_run_packer_controller.sh`) or after installing Packer locally, run:
-
 ```shell
 # Build all templates
 packer build .
 
 # Debug mode
+### shows very verbose output, GUI while installing, and prompts user on errors
 PACKER_LOG=1 packer build -var="dont_display_gui=false" -on-error=ask .
 
 # Overwrite pre-set variable via CLI arg in key=value format:
@@ -33,8 +32,9 @@ Packer runs fairly quickly, depending on if updates or large packages are instal
 
 ### Kali
 
-#### With full system upgrade (as of 2022)
+#### With full system upgrade (as of March 2022)
 * 39 minutes 35 seconds
+_this time will largely depend on how out-of-date the ISO is versus the current rolling distro state_
 
 #### Without full system upgrade
 * 17 minutes 47 seconds
