@@ -10,6 +10,16 @@ variable "iso_kali_hash" {
   default = "784e403bd58e5b05e5c24d91dc44e405fb02674bb85ee0b290e0f2ea16113a39"
 }
 
+variable "iso_arch" {
+  type    = list(string)
+  default = ["archlinux-x86_64.iso", "https://mirrors.edge.kernel.org/archlinux/iso/latest/archlinux-x86_64.iso"]
+}
+
+variable "iso_arch_hash" {
+  type    = string
+  default = "file:https://mirrors.edge.kernel.org/archlinux/iso/latest/sha256sums.txt"
+}
+
 # --- Local Builds only ---
 
 # Do NOT show GUI during OS installation (headless mode)
@@ -35,6 +45,24 @@ variable "boot_wait_debian_kali" {
 variable "full_system_upgrade_command_debian_kali" {
   type    = string
   default = "export DEBIAN_FRONTEND=noninteractive ; echo '* libraries/restart-without-asking boolean true' | sudo debconf-set-selections ; sudo bash -E -c 'apt update -y && yes | apt dist-upgrade -y'"
+}
+
+variable "boot_command_arch" {
+  type = list(string)
+  default = [
+    "<enter><wait10><wait10><wait10><wait10>",
+    "/usr/bin/curl -O http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh<enter><wait5>",
+    "/usr/bin/curl -O http://{{ .HTTPIP }}:{{ .HTTPPort }}/poweroff.timer<enter><wait5>",
+  "/usr/bin/bash ./enable-ssh.sh<enter><wait5>"]
+}
+variable "boot_wait_arch" {
+  type    = string
+  default = "5s"
+}
+
+variable "full_system_upgrade_command_arch" {
+  type    = string
+  default = "pacman -S --refresh --refresh --sysupgrade --noconfirm"
 }
 
 variable "http_directory" {
