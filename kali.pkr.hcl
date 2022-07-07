@@ -26,7 +26,7 @@ build {
   # Kali - local
   source "qemu.baseline" {
     name             = "kali"
-    vm_name          = "packer_kali"
+    vm_name          = "packer_kali.img"
     output_directory = "YOUR_BUILT_VM-kali"
     boot_command     = var.boot_command_debian_kali
     boot_wait        = var.boot_wait_debian_kali
