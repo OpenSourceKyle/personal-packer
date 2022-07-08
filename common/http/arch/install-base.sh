@@ -120,7 +120,7 @@ echo ">>>> install-base.sh: Completing installation.."
 /usr/bin/umount ${TARGET_DIR}
 # Turning network interfaces down to make sure SSH session was dropped on host.
 # More info at: https://www.packer.io/docs/provisioners/shell.html#handling-reboots
-echo '==> Turning down network interfaces and rebooting'
-for i in $(/usr/bin/ip -brief link | /usr/bin/awk '{print $1}'); do /usr/bin/ip link set ${i} down; done
-/usr/bin/systemctl reboot
+# echo '==> Turning down network interfaces and rebooting'
+# for i in $(/usr/bin/ip -brief link | /usr/bin/awk '{print $1}'); do /usr/bin/ip link set ${i} down; done
+# /usr/bin/systemctl reboot
 echo ">>>> install-base.sh: Installation complete!"
