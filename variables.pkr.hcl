@@ -51,9 +51,9 @@ variable "boot_command_arch" {
   type = list(string)
   default = [
     "<enter><wait10><wait10><wait10><wait10>",
-    "/usr/bin/curl -O http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh<enter><wait5>",
-    "/usr/bin/curl -O http://{{ .HTTPIP }}:{{ .HTTPPort }}/poweroff.timer<enter><wait5>",
-  "/usr/bin/bash ./enable-ssh.sh<enter><wait5>"]
+    "curl -O http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh<enter><wait5>",
+    "curl -O http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/poweroff.timer<enter><wait5>",
+  "bash ./enable-ssh.sh<enter><wait5>"]
 }
 variable "boot_wait_arch" {
   type    = string
@@ -76,7 +76,7 @@ variable "preeed_server_port_min" {
 }
 variable "preeed_server_port_max" {
   type    = number
-  default = 8005
+  default = 8010
 }
 
 variable "cpus" {

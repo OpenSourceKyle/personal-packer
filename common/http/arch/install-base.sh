@@ -4,7 +4,7 @@
 
 set -eux
 
-# if [[ $PACKER_BUILDER_TYPE == "qemu" ]]; then
+# if [[ ${PACKER_BUILDER_TYPE:+1} == "qemu" ]]; then
   DISK='/dev/vda'
 # else
 #   DISK='/dev/sda'
@@ -50,7 +50,7 @@ echo ">>>> install-base.sh: Bootstrapping the base installation.."
 # Need to install netctl as well: https://github.com/archlinux/arch-boxes/issues/70
 # Can be removed when user's Arch plugin will use systemd-networkd: https://github.com/hashicorp/vagrant/pull/11400
 echo ">>>> install-base.sh: Installing basic packages.."
-/usr/bin/arch-chroot ${TARGET_DIR} pacman -S --noconfirm gptfdisk openssh syslinux dhcpcd netctl
+/usr/bin/arch-chroot ${TARGET_DIR} pacman -S --refresh --refresh --sysupgrade --noconfirm gptfdisk openssh syslinux dhcpcd netctl python
 
 echo ">>>> install-base.sh: Configuring syslinux.."
 /usr/bin/arch-chroot ${TARGET_DIR} syslinux-install_update -i -a -m

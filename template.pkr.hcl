@@ -1,4 +1,5 @@
-# Top-level, baseline configurations for local builds
+# --- Baseline configurations ---
+
 # https://www.packer.io/plugins/builders/qemu
 source "qemu" "baseline" {
   cpus      = var.cpus
@@ -20,26 +21,36 @@ source "qemu" "baseline" {
   iso_target_path = "iso_file"
 }
 
-# --- Actual Build Blocks ---
+# https://www.packer.io/plugins/builders/virtualbox/iso
+source "virtualbox-iso" "baseline" {
+  cpus      = var.cpus
+  memory    = var.memory
+  disk_size = var.disk_size
+  headless  = var.dont_display_gui
+
+  http_directory = var.http_directory
+
+  communicator           = "ssh"
+  ssh_username           = var.vm_username
+  ssh_password           = var.vm_password
+  ssh_timeout            = var.ssh_timeout
+  ssh_handshake_attempts = var.ssh_attempts
+
+  shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
+  shutdown_timeout = var.shutdown_timeout
+
+  iso_target_path = "iso_file"
+}
+
+# --- Build Blocks ---
 
 build {
-  # Kali - local
-  source "qemu.baseline" {
-    name             = "kali"
-    vm_name          = "packer_kali.img"
-    output_directory = "YOUR_BUILT_VM-kali"
-    boot_command     = var.boot_command_debian_kali
-    boot_wait        = var.boot_wait_debian_kali
-    # NOTE: ISO must be downloaded to $CWD or the ISO will be downloaded
-    iso_urls     = var.iso_kali
-    iso_checksum = var.iso_kali_hash
-  }
 
-  # Arch - local
+  # Arch - QEMU (KVM) 
   source "qemu.baseline" {
     name             = "arch"
     vm_name          = "packer_arch.img"
-    output_directory = "YOUR_BUILT_VM-arch"
+    output_directory = "YOUR_BUILT_VM-arch-qemu"
     boot_command     = var.boot_command_arch
     boot_wait        = var.boot_wait_arch
     # NOTE: ISO must be downloaded to $CWD or the ISO will be downloaded
@@ -47,7 +58,32 @@ build {
     iso_checksum = var.iso_arch_hash
   }
 
-  # --- Provision to enable Ansible configuration later ---
+  # Kali - QEMU (KVM) 
+  source "qemu.baseline" {
+    name             = "kali"
+    vm_name          = "packer_kali.img"
+    output_directory = "YOUR_BUILT_VM-kali-qemu"
+    boot_command     = var.boot_command_debian_kali
+    boot_wait        = var.boot_wait_debian_kali
+    # NOTE: ISO must be downloaded to $CWD or the ISO will be downloaded
+    iso_urls     = var.iso_kali
+    iso_checksum = var.iso_kali_hash
+  }
+
+  # Kali - Virtualbox
+  source "virtualbox-iso.baseline" {
+    name             = "kali"
+    vm_name          = "packer_kali.img"
+    output_directory = "YOUR_BUILT_VM-kali-virtualbox"
+    boot_command     = var.boot_command_debian_kali
+    boot_wait        = var.boot_wait_debian_kali
+    # NOTE: ISO must be downloaded to $CWD or the ISO will be downloaded
+    iso_urls     = var.iso_kali
+    iso_checksum = var.iso_kali_hash
+  }
+
+  # --- Provision post-building ---
+
   # Create ~/.ssh directory
   provisioner "shell" {
     inline = ["rm -rf ~/.ssh/", "mkdir ~/.ssh"]
@@ -64,12 +100,12 @@ build {
   # Perform full system update/upgrade
   # NOTE: this will take some time on rolling-updates OSes
   provisioner "shell" {
-    only = ["*kali"]
+    only   = ["*.kali"]
     inline = [var.full_system_upgrade_command_debian_kali]
   }
   provisioner "shell" {
-    only = ["qemu.arch"]
-    execute_command = "sudo -E -S bash '{{ .Path }}'"
-    script = "common/http/arch/install-base.sh"
+    only            = ["qemu.arch"]
+    execute_command = "sudo --preserve-env bash '{{ .Path }}'"
+    script          = "common/http/arch/install-base.sh"
   }
 }
