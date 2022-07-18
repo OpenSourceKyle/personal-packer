@@ -28,6 +28,8 @@ source "virtualbox-iso" "baseline" {
   disk_size = var.disk_size
   headless  = var.dont_display_gui
 
+  guest_os_type = "Debian_64"
+
   http_directory = var.http_directory
 
   communicator           = "ssh"
@@ -54,7 +56,7 @@ build {
     boot_command     = var.boot_command_arch
     boot_wait        = var.boot_wait_arch
     # NOTE: ISO must be downloaded to $CWD or the ISO will be downloaded
-    iso_urls     = var.iso_arch
+    iso_url      = var.iso_arch
     iso_checksum = var.iso_arch_hash
   }
 
@@ -66,7 +68,7 @@ build {
     boot_command     = var.boot_command_debian_kali
     boot_wait        = var.boot_wait_debian_kali
     # NOTE: ISO must be downloaded to $CWD or the ISO will be downloaded
-    iso_urls     = var.iso_kali
+    iso_url      = var.iso_kali
     iso_checksum = var.iso_kali_hash
   }
 
@@ -78,7 +80,7 @@ build {
     boot_command     = var.boot_command_debian_kali
     boot_wait        = var.boot_wait_debian_kali
     # NOTE: ISO must be downloaded to $CWD or the ISO will be downloaded
-    iso_urls     = var.iso_kali
+    iso_url      = var.iso_kali
     iso_checksum = var.iso_kali_hash
   }
 

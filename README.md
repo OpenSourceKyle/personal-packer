@@ -27,6 +27,12 @@ packer build -only 'qemu.kali' .
 
 # Kali
 packer build -only 'virtualbox-iso.kali' .
+
+# Kali Latest Image (ascertain version via curl)
+packer build \
+    -only 'virtualbox-iso.kali' \
+    -var="iso_kali=https://cdimage.kali.org/current/$(curl -so- https://cdimage.kali.org/current/ | grep -oP 'kali-linux-.*?-installer.amd64.iso' | uniq)" \
+    .
 ```
 
 ## Debug
