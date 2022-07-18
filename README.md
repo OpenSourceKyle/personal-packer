@@ -38,14 +38,19 @@ packer build \
 ## Debug
 ```shell
 # Shows very verbose output, GUI while installing, and prompts user on errors
-PACKER_LOG=1 packer build -var="dont_display_gui=false" -on-error=ask .
+PACKER_LOG=1 packer build \
+    -var="dont_display_gui=false" \
+    -on-error=ask \
+    .
 
 # Overwrite pre-set variable via CLI arg in key=value format:
 ### ACTION: Do NOT perform full system upgrade after installation (to minimize build time)
 ### NOTE: this works by overwriting the system update command to a 'nop' command 
 ### NOTE: this cannot be an empty string or the build will fail (at the very end!)
 ### NOTE: the arg must be in variables.pkr.hcl
-packer build -var="full_system_upgrade_command_debian_kali=echo do not update" .
+packer build \
+    -var="full_system_upgrade_command_debian_kali=echo do not update" \
+    .
 ```
 
 ---
@@ -78,7 +83,9 @@ Packer deletes a VM by default on failure instead of asking. By keeping the VM (
 
 ```shell
 # Add the argument `-on-error=ask` after the subcommand like:
-packer build -on-error=ask .
+packer build \
+    -on-error=ask \
+    .
 ```
 
 ## Show debug output
