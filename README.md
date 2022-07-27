@@ -25,6 +25,9 @@ packer build -only 'qemu.kali' .
 
 # --- Virtualbox ---
 
+# Arch
+packer build -only 'virtualbox-iso.arch' .
+
 # Kali
 packer build -only 'virtualbox-iso.kali' .
 

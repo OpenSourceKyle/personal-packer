@@ -50,10 +50,9 @@ variable "full_system_upgrade_command_debian_kali" {
 variable "boot_command_arch" {
   type = list(string)
   default = [
-    "<enter><wait10><wait10><wait10><wait10>",
-    "curl -O http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh<enter><wait5>",
-    "curl -O http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/poweroff.timer<enter><wait5>",
-  "bash ./enable-ssh.sh<enter><wait5>"]
+    "<enter><wait40>",
+    "curl --silent http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh | bash <enter><wait5>"
+  ]
 }
 variable "boot_wait_arch" {
   type    = string

@@ -1,126 +1,86 @@
 #!/usr/bin/env bash
-
-# Reference: https://github.com/conao3/packer-manjaro/blob/master/scripts/install-base.sh
+# Adapted from: https://github.com/conao3/packer-manjaro/blob/master/scripts/install-base.sh
+# Reference: https://www.tecmint.com/arch-linux-installation-and-configuration-guide/
 
 set -eux
 
-# if [[ ${PACKER_BUILDER_TYPE:+1} == "qemu" ]]; then
-  DISK='/dev/vda'
-# else
-#   DISK='/dev/sda'
-# fi
+# --- VARIABLES ---
 
-FQDN='vagrant-arch.vagrantup.com'
+# Discern main disk drive ending in "-da" to provision (QEMU & VBox compatible)
+DISK=/dev/$(/usr/bin/lsblk --output NAME,TYPE | /usr/bin/grep disk | /usr/bin/awk '{print $1}' | /usr/bin/grep -E '.da')
+DISK_PART_BOOT="${DISK}1"
+DISK_PART_ROOT="${DISK}2"
+CHROOT_MOUNT='/mnt'
+CHROOT_MOUNT_BOOT="${CHROOT_MOUNT}/boot/EFI"
+HOSTNAME='arch.localhost'
+
 KEYMAP='us'
 LANGUAGE='en_US.UTF-8'
+TIMEZONE='US/Chicago'  # from /usr/share/zoneinfo/
+
+ARCH_MIRROR_COUNTRY=${ARCH_MIRROR_COUNTRY:-US}
+MIRRORLIST="https://archlinux.org/mirrorlist/?country=${ARCH_MIRROR_COUNTRY}&protocol=https&ip_version=4&use_mirror_status=on"
+
 PASSWORD=$(/usr/bin/openssl passwd -crypt 'user')
-TIMEZONE='UTC'
 
-CONFIG_SCRIPT='/usr/local/bin/arch-config.sh'
-ROOT_PARTITION="${DISK}1"
-TARGET_DIR='/mnt'
-COUNTRY=${COUNTRY:-US}
-MIRRORLIST="https://archlinux.org/mirrorlist/?country=${COUNTRY}&protocol=http&protocol=https&ip_version=4&use_mirror_status=on"
+# --- PRECHECKS ---
 
-echo ">>>> install-base.sh: Clearing partition table on ${DISK}.."
+if [[ ! -e /sys/firmware/efi/efivars ]] ; then
+    echo "(U)EFI required for this installation. Exiting..."
+    return 1
+fi
+
+# --- ACTIONS ---
+
+# Clearing partition table on ${DISK}
 /usr/bin/sgdisk --zap ${DISK}
 
-echo ">>>> install-base.sh: Destroying magic strings and signatures on ${DISK}.."
+# Destroying magic strings and signatures on ${DISK}
 /usr/bin/dd if=/dev/zero of=${DISK} bs=512 count=2048
 /usr/bin/wipefs --all ${DISK}
 
-echo ">>>> install-base.sh: Creating /root partition on ${DISK}.."
-/usr/bin/sgdisk --new=1:0:0 ${DISK}
+# Create EFI partition: 300MB size, type EFI (ef00), named, attribute bootable
+/usr/bin/sgdisk --new=1:0:+300M --typecode=1:ef00 --change-name=1:efi --attributes=1:set:2 ${DISK}
+# Create root partition: remaining free space, type Linux (8300), named
+/usr/bin/sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:root ${DISK}
 
-echo ">>>> install-base.sh: Setting ${DISK} bootable.."
-/usr/bin/sgdisk ${DISK} --attributes=1:set:2
+# Creating /boot filesystem (FAT32)
+/usr/bin/mkfs.fat -F32 ${DISK_PART_BOOT}
+# Creating /root filesystem (ext4)
+/usr/bin/mkfs.ext4 -O ^64bit -F -m 0 -L root ${DISK_PART_ROOT}
 
-echo ">>>> install-base.sh: Creating /root filesystem (ext4).."
-/usr/bin/mkfs.ext4 -O ^64bit -F -m 0 -q -L root ${ROOT_PARTITION}
+# Mounting ${DISK_PART_ROOT} to ${CHROOT_MOUNT}
+/usr/bin/mount ${DISK_PART_ROOT} ${CHROOT_MOUNT}
 
-echo ">>>> install-base.sh: Mounting ${ROOT_PARTITION} to ${TARGET_DIR}.."
-/usr/bin/mount -o noatime,errors=remount-ro ${ROOT_PARTITION} ${TARGET_DIR}
+# Setting pacman ${ARCH_MIRROR_COUNTRY} mirrors
+/usr/bin/curl -s "$MIRRORLIST" | /usr/bin/sed 's/^#Server/Server/' > /etc/pacman.d/mirrorlist
 
-echo ">>>> install-base.sh: Setting pacman ${COUNTRY} mirrors.."
-curl -s "$MIRRORLIST" |  sed 's/^#Server/Server/' > /etc/pacman.d/mirrorlist
-
-echo ">>>> install-base.sh: Bootstrapping the base installation.."
-/usr/bin/pacstrap ${TARGET_DIR} base base-devel linux
-
+# Bootstrapping the base installation
+/usr/bin/sed -i 's/.*ParallelDownloads.*/ParallelDownloads = 5/g' /etc/pacman.conf
+/usr/bin/yes | /usr/bin/pacman -Syy --noconfirm archlinux-keyring
 # Need to install netctl as well: https://github.com/archlinux/arch-boxes/issues/70
 # Can be removed when user's Arch plugin will use systemd-networkd: https://github.com/hashicorp/vagrant/pull/11400
-echo ">>>> install-base.sh: Installing basic packages.."
-/usr/bin/arch-chroot ${TARGET_DIR} pacman -S --refresh --refresh --sysupgrade --noconfirm gptfdisk openssh syslinux dhcpcd netctl python
+/usr/bin/yes | /usr/bin/pacstrap ${CHROOT_MOUNT} base base-devel linux archlinux-keyring gptfdisk openssh syslinux dhcpcd netctl python vim grub efibootmgr dosfstools os-prober mtools rng-tools
 
-echo ">>>> install-base.sh: Configuring syslinux.."
-/usr/bin/arch-chroot ${TARGET_DIR} syslinux-install_update -i -a -m
-/usr/bin/sed -i "s|sda3|${ROOT_PARTITION##/dev/}|" "${TARGET_DIR}/boot/syslinux/syslinux.cfg"
-/usr/bin/sed -i 's/TIMEOUT 50/TIMEOUT 10/' "${TARGET_DIR}/boot/syslinux/syslinux.cfg"
+# System configuration
+/usr/bin/arch-chroot ${CHROOT_MOUNT} echo '${HOSTNAME}' > /etc/hostname
+/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/ln -s /usr/share/zoneinfo/${TIMEZONE} /etc/localtime
+/usr/bin/arch-chroot ${CHROOT_MOUNT} echo 'KEYMAP=${KEYMAP}' > /etc/vconsole.conf
+/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/sed -i 's/#${LANGUAGE}/${LANGUAGE}/' /etc/locale.gen
+/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/locale-gen
+/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/mkinitcpio -p linux
+/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/usermod --password ${PASSWORD} root
+/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/systemctl enable dhcpcd@eth0.service
+/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/sed -i 's/#UseDNS yes/UseDNS no/' /etc/ssh/sshd_config
+/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/systemctl enable sshd.service
+# Workaround for https://bugs.archlinux.org/task/58355 which prevents sshd to accept connections after reboot
+/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/systemctl enable rngd
 
-echo ">>>> install-base.sh: Generating the filesystem table.."
-/usr/bin/genfstab -p ${TARGET_DIR} >> "${TARGET_DIR}/etc/fstab"
+/usr/bin/mount -o noatime,errors=remount-ro --mkdir ${DISK_PART_BOOT} ${CHROOT_MOUNT}/boot/EFI
+# Generate the filesystem table
+/usr/bin/genfstab -U -p ${CHROOT_MOUNT} > ${CHROOT_MOUNT}/etc/fstab
+# Install GRUB UEFI
+/usr/bin/arch-chroot ${CHROOT_MOUNT} grub-install --target=x86_64-efi --bootloader-id=grub_uefi --efi-directory=${CHROOT_MOUNT}/boot/EFI --recheck $DISK
+/usr/bin/arch-chroot ${CHROOT_MOUNT} grub-mkconfig -o /boot/grub/grub.cfg
 
-echo ">>>> install-base.sh: Generating the system configuration script.."
-/usr/bin/install --mode=0755 /dev/null "${TARGET_DIR}${CONFIG_SCRIPT}"
-
-CONFIG_SCRIPT_SHORT=`basename "$CONFIG_SCRIPT"`
-cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
-  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring hostname, timezone, and keymap.."
-  echo '${FQDN}' > /etc/hostname
-  /usr/bin/ln -s /usr/share/zoneinfo/${TIMEZONE} /etc/localtime
-  echo 'KEYMAP=${KEYMAP}' > /etc/vconsole.conf
-  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring locale.."
-  /usr/bin/sed -i 's/#${LANGUAGE}/${LANGUAGE}/' /etc/locale.gen
-  /usr/bin/locale-gen
-  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Creating initramfs.."
-  /usr/bin/mkinitcpio -p linux
-  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Setting root pasword.."
-  /usr/bin/usermod --password ${PASSWORD} root
-  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring network.."
-  # Disable systemd Predictable Network Interface Names and revert to traditional interface names
-  # https://wiki.archlinux.org/index.php/Network_configuration#Revert_to_traditional_interface_names
-  /usr/bin/ln -s /dev/null /etc/udev/rules.d/80-net-setup-link.rules
-  /usr/bin/systemctl enable dhcpcd@eth0.service
-  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring sshd.."
-  /usr/bin/sed -i 's/#UseDNS yes/UseDNS no/' /etc/ssh/sshd_config
-  /usr/bin/systemctl enable sshd.service
-
-  # Workaround for https://bugs.archlinux.org/task/58355 which prevents sshd to accept connections after reboot
-  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Adding workaround for sshd connection issue after reboot.."
-  /usr/bin/pacman -S --noconfirm rng-tools
-  /usr/bin/systemctl enable rngd
-
-  # Vagrant-specific configuration
-  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Creating vagrant user.."
-  /usr/bin/useradd --password ${PASSWORD} --comment 'Vagrant User' --create-home --user-group user
-  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring sudo.."
-  echo 'Defaults env_keep += "SSH_AUTH_SOCK"' > /etc/sudoers.d/10_user
-  echo 'user ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers.d/10_user
-  /usr/bin/chmod 0440 /etc/sudoers.d/10_user
-  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring ssh access for user.."
-  /usr/bin/install --directory --owner=user --group=user --mode=0700 /home/user/.ssh
-  /usr/bin/curl --output /home/user/.ssh/authorized_keys --location https://raw.github.com/mitchellh/user/master/keys/user.pub
-  /usr/bin/chown user:user /home/user/.ssh/authorized_keys
-  /usr/bin/chmod 0600 /home/user/.ssh/authorized_keys
-
-  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Cleaning up.."
-  /usr/bin/pacman -Rcns --noconfirm gptfdisk
-EOF
-
-echo ">>>> install-base.sh: Entering chroot and configuring system.."
-/usr/bin/arch-chroot ${TARGET_DIR} ${CONFIG_SCRIPT}
-rm "${TARGET_DIR}${CONFIG_SCRIPT}"
-
-# http://comments.gmane.org/gmane.linux.arch.general/48739
-echo ">>>> install-base.sh: Adding workaround for shutdown race condition.."
-/usr/bin/install --mode=0644 /root/poweroff.timer "${TARGET_DIR}/etc/systemd/system/poweroff.timer"
-
-echo ">>>> install-base.sh: Completing installation.."
-/usr/bin/sleep 3
-/usr/bin/umount ${TARGET_DIR}
-# Turning network interfaces down to make sure SSH session was dropped on host.
-# More info at: https://www.packer.io/docs/provisioners/shell.html#handling-reboots
-# echo '==> Turning down network interfaces and rebooting'
-# for i in $(/usr/bin/ip -brief link | /usr/bin/awk '{print $1}'); do /usr/bin/ip link set ${i} down; done
-# /usr/bin/systemctl reboot
-echo ">>>> install-base.sh: Installation complete!"
+echo "===>>> INSTALLATION COMPLETE <<<==="
