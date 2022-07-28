@@ -7,26 +7,27 @@ set -eu
 
 # --- VARIABLES ---
 
-# Discern main disk drive ending in "-da" to provision (QEMU & VBox compatible)
-DISK=/dev/$(/usr/bin/lsblk --output NAME,TYPE | /usr/bin/grep disk | /usr/bin/awk '{print $1}' | /usr/bin/grep --extended-regexp '.da|nvme')
+# TODO: SETUP manually setting of drive and partition variables (for SSD)
+
+# Discern main disk drive to provision (QEMU & VBox compatible)
+DISK=/dev/$(/usr/bin/lsblk --output NAME,TYPE | /usr/bin/grep disk | /usr/bin/awk '{print $1}' | /usr/bin/grep --extended-regexp '.da|nvme' | tail -n1)
 DISK_PART_BOOT="${DISK}1"
 DISK_PART_ROOT="${DISK}2"
 CHROOT_MOUNT='/mnt'
-CHROOT_MOUNT_BOOT="${CHROOT_MOUNT}/boot/EFI"
-HOSTNAME='arch.localhost'
+# Bootloader: ${EFI_DIR}/EFI/${BOOTLOADER_DIR}/grubx64.efi
+EFI_DIR='/boot/efi'
+BOOTLOADER_DIR='boot'
 
+HOSTNAME='arch.localhost'
 KEYMAP='us'
 LANGUAGE='en_US.UTF-8'
 TIMEZONE='US/Chicago'  # from /usr/share/zoneinfo/
 
-ARCH_MIRROR_COUNTRY=${ARCH_MIRROR_COUNTRY:-US}
+# https://stackoverflow.com/a/28085062
+: "${ARCH_MIRROR_COUNTRY:=US}"
 MIRRORLIST="https://archlinux.org/mirrorlist/?country=${ARCH_MIRROR_COUNTRY}&protocol=https&ip_version=4&use_mirror_status=on"
 
 PASSWORD=$(/usr/bin/openssl passwd -crypt 'user')
-
-# Bootloader: ${EFI_DIR}/EFI/${BOOTLOADER_DIR}/grubx64.efi
-EFI_DIR='/boot/efi'
-BOOTLOADER_DIR='boot'
 
 # --- PRECHECKS ---
 
@@ -35,7 +36,7 @@ if [[ ! -e /sys/firmware/efi/efivars ]] ; then
     return 1
 fi
 
-# --- ACTIONS ---
+# === DISK ===
 
 # Clearing partition table on "${DISK}"
 /usr/bin/sgdisk --zap "${DISK}"
@@ -45,10 +46,9 @@ fi
 /usr/bin/wipefs --all "${DISK}"
 
 # Create EFI partition: size, type EFI (ef00), named, attribute bootable
-/usr/bin/sgdisk --new=1:0:+550M --typecode=1:ef00 --change-name=1:efi --attributes=1:set:2 "${DISK}"
+/usr/bin/sgdisk --new=1:0:+550M --typecode=1:ef00 --change-name=1:boot_efi --attributes=1:set:2 "${DISK}"
 # Create root partition: remaining free space, type Linux (8300), named
 /usr/bin/sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:root "${DISK}"
-
 # Creating /boot filesystem (FAT32)
 /usr/bin/mkfs.fat -F32 "${DISK_PART_BOOT}"
 # Creating /root filesystem (ext4)
@@ -56,6 +56,8 @@ fi
 
 # Mounting "${DISK_PART_ROOT}" to "${CHROOT_MOUNT}"
 /usr/bin/mount "${DISK_PART_ROOT}" "${CHROOT_MOUNT}"
+
+# === SYSTEM ===
 
 # Setting pacman ${ARCH_MIRROR_COUNTRY} mirrors
 /usr/bin/curl --silent "${MIRRORLIST}" | /usr/bin/sed 's/^#Server/Server/' > /etc/pacman.d/mirrorlist
@@ -75,17 +77,22 @@ fi
 /usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/sed --in-place "s/#${LANGUAGE}/${LANGUAGE}/" /etc/locale.gen
 /usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/locale-gen
 /usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/usermod --password "${PASSWORD}" root
-/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/systemctl enable dhcpcd@eth0.service
-/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/sed --in-place 's/#UseDNS yes/UseDNS no/' /etc/ssh/sshd_config
+/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/systemctl enable dhcpcd.service
+# /usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/sed --in-place 's/#UseDNS yes/UseDNS no/' /etc/ssh/sshd_config
 /usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/systemctl enable sshd.service
 # Workaround for https://bugs.archlinux.org/task/58355 which prevents sshd to accept connections after reboot
 /usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/systemctl enable rngd
 
+# === BOOT ===
+
+# Mount boot drive
 /usr/bin/mount --options noatime,errors=remount-ro --mkdir "${DISK_PART_BOOT}" "${CHROOT_MOUNT}${EFI_DIR}"
 # Install GRUB UEFI
 /usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/grub-install --target=x86_64-efi --bootloader-id="${BOOTLOADER_DIR}" --efi-directory="${EFI_DIR}" "$DISK"
 /usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/grub-mkconfig --output /boot/grub/grub.cfg
 # https://askubuntu.com/a/573672
 echo -E "\EFI\\${BOOTLOADER_DIR}\grubx64.efi" | tee "${CHROOT_MOUNT}${EFI_DIR}/startup.nsh"
+
+# === DONE ===
 
 echo -e "\n===>>> BASE INSTALLATION COMPLETE <<<===\n"
