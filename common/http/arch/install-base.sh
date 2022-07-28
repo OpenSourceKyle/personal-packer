@@ -4,19 +4,16 @@
 # Reference: https://github.com/badele/archlinux-auto-install/blob/main/install/install.sh
 
 set -eu
+set -x
 
-# --- VARIABLES ---
+# === VARIABLES ===
 
 # TODO: SETUP manually setting of drive and partition variables (for SSD)
 
 # Discern main disk drive to provision (QEMU & VBox compatible)
-DISK=/dev/$(/usr/bin/lsblk --output NAME,TYPE | /usr/bin/grep disk | /usr/bin/awk '{print $1}' | /usr/bin/grep --extended-regexp '.da|nvme' | tail -n1)
+DISK=/dev/$(lsblk --output NAME,TYPE | grep disk | awk '{print $1}' | grep --extended-regexp '.da|nvme' | tail -n1)
 DISK_PART_BOOT="${DISK}1"
 DISK_PART_ROOT="${DISK}2"
-CHROOT_MOUNT='/mnt'
-# Bootloader: ${EFI_DIR}/EFI/${BOOTLOADER_DIR}/grubx64.efi
-EFI_DIR='/boot/efi'
-BOOTLOADER_DIR='boot'
 
 HOSTNAME='arch.localhost'
 KEYMAP='us'
@@ -25,11 +22,28 @@ TIMEZONE='US/Chicago'  # from /usr/share/zoneinfo/
 
 # https://stackoverflow.com/a/28085062
 : "${ARCH_MIRROR_COUNTRY:=US}"
+
+# Reference: https://unix.stackexchange.com/a/361789
+# ROOT_PASSWORD="$(< /dev/urandom tr -cd '[:print:]' | head -c 20)" # generates random password
+ROOT_PASSWORD="root"
+
+USER_NAME='user'
+USER_PASSWORD='user'
+
+# --- do NOT modify ---
+
+CHROOT_MOUNT='/mnt'
+# Bootloader: ${EFI_DIR}/EFI/${BOOTLOADER_DIR}/grubx64.efi
+EFI_DIR='/boot/efi'
+BOOTLOADER_DIR='boot'
+
+# TODO: Warning: truncating password to 8 characters
+ROOT_PASSWORD_CRYPTED=$(openssl passwd -crypt "$ROOT_PASSWORD")
+USER_PASSWORD_CRYPTED=$(openssl passwd -crypt "$USER_PASSWORD")
+
 MIRRORLIST="https://archlinux.org/mirrorlist/?country=${ARCH_MIRROR_COUNTRY}&protocol=https&ip_version=4&use_mirror_status=on"
 
-PASSWORD=$(/usr/bin/openssl passwd -crypt 'user')
-
-# --- PRECHECKS ---
+# === PRECHECKS ===
 
 if [[ ! -e /sys/firmware/efi/efivars ]] ; then
     echo "(U)EFI required for this installation. Exiting..."
@@ -39,59 +53,66 @@ fi
 # === DISK ===
 
 # Clearing partition table on "${DISK}"
-/usr/bin/sgdisk --zap "${DISK}"
+sgdisk --zap "${DISK}"
 
 # Destroying magic strings and signatures on "${DISK}"
-/usr/bin/dd if=/dev/zero of="${DISK}" bs=512 count=2048
-/usr/bin/wipefs --all "${DISK}"
+dd if=/dev/zero of="${DISK}" bs=512 count=2048
+wipefs --all "${DISK}"
 
 # Create EFI partition: size, type EFI (ef00), named, attribute bootable
-/usr/bin/sgdisk --new=1:0:+550M --typecode=1:ef00 --change-name=1:boot_efi --attributes=1:set:2 "${DISK}"
+sgdisk --new=1:0:+550M --typecode=1:ef00 --change-name=1:boot_efi --attributes=1:set:2 "${DISK}"
 # Create root partition: remaining free space, type Linux (8300), named
-/usr/bin/sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:root "${DISK}"
+sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:root "${DISK}"
 # Creating /boot filesystem (FAT32)
-/usr/bin/mkfs.fat -F32 "${DISK_PART_BOOT}"
+mkfs.fat -F32 -n BOOT_EFI "${DISK_PART_BOOT}"
 # Creating /root filesystem (ext4)
-/usr/bin/mkfs.ext4 -O ^64bit -F -m 0 -L root "${DISK_PART_ROOT}"
+mkfs.ext4 -O ^64bit -F -m 0 -L root "${DISK_PART_ROOT}"
 
 # Mounting "${DISK_PART_ROOT}" to "${CHROOT_MOUNT}"
-/usr/bin/mount "${DISK_PART_ROOT}" "${CHROOT_MOUNT}"
+mount "${DISK_PART_ROOT}" "${CHROOT_MOUNT}"
 
-# === SYSTEM ===
+# === SYSTEM CONFIG ===
 
 # Setting pacman ${ARCH_MIRROR_COUNTRY} mirrors
-/usr/bin/curl --silent "${MIRRORLIST}" | /usr/bin/sed 's/^#Server/Server/' > /etc/pacman.d/mirrorlist
+curl --silent "${MIRRORLIST}" | sed 's/^#Server/Server/' > /etc/pacman.d/mirrorlist
 
-# Bootstrapping the base installation
-/usr/bin/sed --in-place 's/.*ParallelDownloads.*/ParallelDownloads = 5/g' /etc/pacman.conf
-/usr/bin/yes | /usr/bin/pacman -S --refresh --refresh --noconfirm archlinux-keyring
-# Need to install netctl as well: https://github.com/archlinux/arch-boxes/issues/70
-# Can be removed when user's Arch plugin will use systemd-networkd: https://github.com/hashicorp/vagrant/pull/11400
-/usr/bin/yes | /usr/bin/pacstrap "${CHROOT_MOUNT}" base base-devel linux archlinux-keyring gptfdisk openssh syslinux dhcpcd netctl python vim grub efibootmgr dosfstools os-prober mtools rng-tools
-/usr/bin/genfstab -U -p "${CHROOT_MOUNT}" >> "${CHROOT_MOUNT}"/etc/fstab
+# pacstrap installation
+sed --in-place 's/.*ParallelDownloads.*/ParallelDownloads = 5/g' /etc/pacman.conf
+yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
+yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-firmware intel-ucode archlinux-keyring openssh dhcpcd python vim grub efibootmgr dosfstools os-prober mtools
+# TODO: add to Ansible playbooks
+# xdg-user-dirs xorg xorg-xinit i3
 
-# System configuration
-/usr/bin/arch-chroot "${CHROOT_MOUNT}" echo "${HOSTNAME}" > /etc/hostname
-/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/ln --symbolic /usr/share/zoneinfo/"${TIMEZONE}" /etc/localtime
-/usr/bin/arch-chroot "${CHROOT_MOUNT}" echo "KEYMAP=${KEYMAP}" > /etc/vconsole.conf
-/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/sed --in-place "s/#${LANGUAGE}/${LANGUAGE}/" /etc/locale.gen
-/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/locale-gen
-/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/usermod --password "${PASSWORD}" root
-/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/systemctl enable dhcpcd.service
-# /usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/sed --in-place 's/#UseDNS yes/UseDNS no/' /etc/ssh/sshd_config
-/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/systemctl enable sshd.service
-# Workaround for https://bugs.archlinux.org/task/58355 which prevents sshd to accept connections after reboot
-/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/systemctl enable rngd
+genfstab -U -p "${CHROOT_MOUNT}" > "${CHROOT_MOUNT}"/etc/fstab
+arch-chroot "${CHROOT_MOUNT}" bash -c "
+    # Machine
+    echo ${HOSTNAME} > /etc/hostname
+    ln --symbolic --force /usr/share/zoneinfo/${TIMEZONE} /etc/localtime
+    hwclock --systohc
+    timedatectl set-ntp true
+    echo KEYMAP=${KEYMAP} > /etc/vconsole.conf
+    sed --in-place s/#${LANGUAGE}/${LANGUAGE}/ /etc/locale.gen
+    locale-gen
+    systemctl enable dhcpcd.service sshd.service
+
+    # Root
+    usermod --password ${ROOT_PASSWORD_CRYPTED} root
+
+    # User
+    useradd $USER_NAME --create-home --user-group --password $USER_PASSWORD_CRYPTED --groups wheel
+"
 
 # === BOOT ===
 
 # Mount boot drive
-/usr/bin/mount --options noatime,errors=remount-ro --mkdir "${DISK_PART_BOOT}" "${CHROOT_MOUNT}${EFI_DIR}"
+mount --options noatime,errors=remount-ro --mkdir "${DISK_PART_BOOT}" "${CHROOT_MOUNT}${EFI_DIR}"
 # Install GRUB UEFI
-/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/grub-install --target=x86_64-efi --bootloader-id="${BOOTLOADER_DIR}" --efi-directory="${EFI_DIR}" "$DISK"
-/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/grub-mkconfig --output /boot/grub/grub.cfg
-# https://askubuntu.com/a/573672
-echo -E "\EFI\\${BOOTLOADER_DIR}\grubx64.efi" | tee "${CHROOT_MOUNT}${EFI_DIR}/startup.nsh"
+arch-chroot "${CHROOT_MOUNT}" bash -c "
+    grub-install --target=x86_64-efi --bootloader-id=${BOOTLOADER_DIR} --efi-directory=${EFI_DIR} ${DISK}
+    grub-mkconfig --output /boot/grub/grub.cfg
+    # Virtualbox UEFI Workaround: https://askubuntu.com/a/573672
+    echo -E '\EFI\\${BOOTLOADER_DIR}\grubx64.efi' | tee ${EFI_DIR}/startup.nsh
+"
 
 # === DONE ===
 
