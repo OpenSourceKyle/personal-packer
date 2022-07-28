@@ -8,7 +8,7 @@ set -eu
 # --- VARIABLES ---
 
 # Discern main disk drive ending in "-da" to provision (QEMU & VBox compatible)
-DISK=/dev/$(/usr/bin/lsblk --output NAME,TYPE | /usr/bin/grep disk | /usr/bin/awk '{print $1}' | /usr/bin/grep -E '.da|nvme')
+DISK=/dev/$(/usr/bin/lsblk --output NAME,TYPE | /usr/bin/grep disk | /usr/bin/awk '{print $1}' | /usr/bin/grep --extended-regexp '.da|nvme')
 DISK_PART_BOOT="${DISK}1"
 DISK_PART_ROOT="${DISK}2"
 CHROOT_MOUNT='/mnt'
@@ -24,6 +24,10 @@ MIRRORLIST="https://archlinux.org/mirrorlist/?country=${ARCH_MIRROR_COUNTRY}&pro
 
 PASSWORD=$(/usr/bin/openssl passwd -crypt 'user')
 
+# Bootloader: ${EFI_DIR}/EFI/${BOOTLOADER_DIR}/grubx64.efi
+EFI_DIR='/boot/efi'
+BOOTLOADER_DIR='boot'
+
 # --- PRECHECKS ---
 
 if [[ ! -e /sys/firmware/efi/efivars ]] ; then
@@ -33,58 +37,54 @@ fi
 
 # --- ACTIONS ---
 
-# Clearing partition table on ${DISK}
-/usr/bin/sgdisk --zap ${DISK}
+# Clearing partition table on "${DISK}"
+/usr/bin/sgdisk --zap "${DISK}"
 
-# Destroying magic strings and signatures on ${DISK}
-/usr/bin/dd if=/dev/zero of=${DISK} bs=512 count=2048
-/usr/bin/wipefs --all ${DISK}
+# Destroying magic strings and signatures on "${DISK}"
+/usr/bin/dd if=/dev/zero of="${DISK}" bs=512 count=2048
+/usr/bin/wipefs --all "${DISK}"
 
 # Create EFI partition: size, type EFI (ef00), named, attribute bootable
-/usr/bin/sgdisk --new=1:0:+550M --typecode=1:ef00 --change-name=1:efi --attributes=1:set:2 ${DISK}
+/usr/bin/sgdisk --new=1:0:+550M --typecode=1:ef00 --change-name=1:efi --attributes=1:set:2 "${DISK}"
 # Create root partition: remaining free space, type Linux (8300), named
-/usr/bin/sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:root ${DISK}
-/usr/bin/sgdisk -p ${DISK}
+/usr/bin/sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:root "${DISK}"
 
 # Creating /boot filesystem (FAT32)
-/usr/bin/mkfs.fat -F32 ${DISK_PART_BOOT}
+/usr/bin/mkfs.fat -F32 "${DISK_PART_BOOT}"
 # Creating /root filesystem (ext4)
-/usr/bin/mkfs.ext4 -O ^64bit -F -m 0 -L root ${DISK_PART_ROOT}
+/usr/bin/mkfs.ext4 -O ^64bit -F -m 0 -L root "${DISK_PART_ROOT}"
 
-# Mounting ${DISK_PART_ROOT} to ${CHROOT_MOUNT}
-/usr/bin/mount ${DISK_PART_ROOT} ${CHROOT_MOUNT}
+# Mounting "${DISK_PART_ROOT}" to "${CHROOT_MOUNT}"
+/usr/bin/mount "${DISK_PART_ROOT}" "${CHROOT_MOUNT}"
 
 # Setting pacman ${ARCH_MIRROR_COUNTRY} mirrors
-/usr/bin/curl -s "${MIRRORLIST}" | /usr/bin/sed 's/^#Server/Server/' > /etc/pacman.d/mirrorlist
+/usr/bin/curl --silent "${MIRRORLIST}" | /usr/bin/sed 's/^#Server/Server/' > /etc/pacman.d/mirrorlist
 
 # Bootstrapping the base installation
-/usr/bin/sed -i 's/.*ParallelDownloads.*/ParallelDownloads = 5/g' /etc/pacman.conf
+/usr/bin/sed --in-place 's/.*ParallelDownloads.*/ParallelDownloads = 5/g' /etc/pacman.conf
 /usr/bin/yes | /usr/bin/pacman -S --refresh --refresh --noconfirm archlinux-keyring
 # Need to install netctl as well: https://github.com/archlinux/arch-boxes/issues/70
 # Can be removed when user's Arch plugin will use systemd-networkd: https://github.com/hashicorp/vagrant/pull/11400
-/usr/bin/yes | /usr/bin/pacstrap ${CHROOT_MOUNT} base base-devel linux archlinux-keyring gptfdisk openssh syslinux dhcpcd netctl python vim grub efibootmgr dosfstools os-prober mtools rng-tools
-/usr/bin/genfstab -U -p ${CHROOT_MOUNT} >> ${CHROOT_MOUNT}/etc/fstab
+/usr/bin/yes | /usr/bin/pacstrap "${CHROOT_MOUNT}" base base-devel linux archlinux-keyring gptfdisk openssh syslinux dhcpcd netctl python vim grub efibootmgr dosfstools os-prober mtools rng-tools
+/usr/bin/genfstab -U -p "${CHROOT_MOUNT}" >> "${CHROOT_MOUNT}"/etc/fstab
 
 # System configuration
-/usr/bin/arch-chroot ${CHROOT_MOUNT} echo "${HOSTNAME}" > /etc/hostname
-/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/ln -s /usr/share/zoneinfo/"${TIMEZONE}" /etc/localtime
-/usr/bin/arch-chroot ${CHROOT_MOUNT} echo "KEYMAP=${KEYMAP}" > /etc/vconsole.conf
-/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/sed -i "s/#${LANGUAGE}/${LANGUAGE}/" /etc/locale.gen
-/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/locale-gen
-# /usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/mkinitcpio -p linux
-/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/usermod --password "${PASSWORD}" root
-/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/systemctl enable dhcpcd@eth0.service
-/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/sed -i 's/#UseDNS yes/UseDNS no/' /etc/ssh/sshd_config
-/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/systemctl enable sshd.service
+/usr/bin/arch-chroot "${CHROOT_MOUNT}" echo "${HOSTNAME}" > /etc/hostname
+/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/ln --symbolic /usr/share/zoneinfo/"${TIMEZONE}" /etc/localtime
+/usr/bin/arch-chroot "${CHROOT_MOUNT}" echo "KEYMAP=${KEYMAP}" > /etc/vconsole.conf
+/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/sed --in-place "s/#${LANGUAGE}/${LANGUAGE}/" /etc/locale.gen
+/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/locale-gen
+/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/usermod --password "${PASSWORD}" root
+/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/systemctl enable dhcpcd@eth0.service
+/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/sed --in-place 's/#UseDNS yes/UseDNS no/' /etc/ssh/sshd_config
+/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/systemctl enable sshd.service
 # Workaround for https://bugs.archlinux.org/task/58355 which prevents sshd to accept connections after reboot
-/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/systemctl enable rngd
+/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/systemctl enable rngd
 
-EFI_DIR='/boot/efi'
-/usr/bin/mount -o noatime,errors=remount-ro --mkdir "${DISK_PART_BOOT}" "${CHROOT_MOUNT}${EFI_DIR}"
+/usr/bin/mount --options noatime,errors=remount-ro --mkdir "${DISK_PART_BOOT}" "${CHROOT_MOUNT}${EFI_DIR}"
 # Install GRUB UEFI
-BOOTLOADER_DIR='boot'  # different from $EFI_DIR (e.g. ${EFI_DIR}/EFI/${BOOTLOADER_DIR}/grubx64.efi)
-/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/grub-install --target=x86_64-efi --bootloader-id="${BOOTLOADER_DIR}" --efi-directory="${EFI_DIR}" "$DISK"
-/usr/bin/arch-chroot ${CHROOT_MOUNT} /usr/bin/grub-mkconfig -o /boot/grub/grub.cfg
+/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/grub-install --target=x86_64-efi --bootloader-id="${BOOTLOADER_DIR}" --efi-directory="${EFI_DIR}" "$DISK"
+/usr/bin/arch-chroot "${CHROOT_MOUNT}" /usr/bin/grub-mkconfig --output /boot/grub/grub.cfg
 # https://askubuntu.com/a/573672
 echo -E "\EFI\\${BOOTLOADER_DIR}\grubx64.efi" | tee "${CHROOT_MOUNT}${EFI_DIR}/startup.nsh"
 
