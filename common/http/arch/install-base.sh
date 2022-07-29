@@ -79,9 +79,7 @@ curl --silent "${MIRRORLIST}" | sed 's/^#Server/Server/' > /etc/pacman.d/mirrorl
 # pacstrap installation
 sed --in-place 's/.*ParallelDownloads.*/ParallelDownloads = 5/g' /etc/pacman.conf
 yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
-yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-firmware intel-ucode archlinux-keyring openssh dhcpcd python vim grub efibootmgr dosfstools os-prober mtools
-# TODO: add to Ansible playbooks
-# xdg-user-dirs xorg xorg-xinit i3
+yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-headers linux-firmware intel-ucode archlinux-keyring openssh dhcpcd python vim grub efibootmgr dosfstools os-prober mtools
 
 genfstab -U -p "${CHROOT_MOUNT}" > "${CHROOT_MOUNT}"/etc/fstab
 arch-chroot "${CHROOT_MOUNT}" bash -c "
@@ -97,6 +95,7 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
 
     # Root
     usermod --password ${ROOT_PASSWORD_CRYPTED} root
+    echo '%wheel ALL=(ALL) ALL' | tee -a /etc/sudoers && visudo -c
 
     # User
     useradd $USER_NAME --create-home --user-group --password $USER_PASSWORD_CRYPTED --groups wheel
