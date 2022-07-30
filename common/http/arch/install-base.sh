@@ -4,7 +4,6 @@
 # Reference: https://github.com/badele/archlinux-auto-install/blob/main/install/install.sh
 
 set -eu
-set -x
 
 # === VARIABLES ===
 
