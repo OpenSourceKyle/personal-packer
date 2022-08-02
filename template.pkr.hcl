@@ -23,11 +23,12 @@ source "qemu" "baseline" {
 
 # https://www.packer.io/plugins/builders/virtualbox/iso
 source "virtualbox-iso" "baseline" {
-  cpus      = var.cpus
-  firmware  = "efi"
-  memory    = var.memory
-  disk_size = var.disk_size
-  headless  = var.dont_display_gui
+  cpus                 = var.cpus
+  firmware             = "efi"
+  memory               = var.memory
+  disk_size            = var.disk_size
+  guest_additions_mode = "disable"
+  headless             = var.dont_display_gui
 
   http_directory = var.http_directory
 
@@ -110,7 +111,7 @@ build {
   }
   # Ensure SSH keys permissions are correct & passwordless sudo user exists
   provisioner "shell" {
-    inline = ["echo '${var.vm_password}' | sudo -S /bin/sh -c 'echo \"${var.vm_username} ALL=(ALL) NOPASSWD: ALL\" | tee /etc/sudoers.d/11_passwordless_sudo_user && chmod 440 /etc/sudoers.d/11_passwordless_sudo_user && visudo -c'", "chmod 700 ~/.ssh", "chmod 644 -R ~/.ssh/*", "chmod 600 ~/.ssh/id_rsa", "chmod g-w,o-w ~", "touch ~/VM_CREATED_ON_\"$(date +%Y-%m-%d_%H-%M-%S)\""]
+    inline = ["echo '${var.vm_password}' | sudo -S /bin/sh -c 'echo \"${var.vm_username} ALL=(ALL) NOPASSWD: ALL\" | tee /etc/sudoers.d/11_passwordless_sudo_user && chmod 440 /etc/sudoers.d/11_passwordless_sudo_user && visudo -sc'", "chmod 700 ~/.ssh", "chmod 644 -R ~/.ssh/*", "chmod 600 ~/.ssh/id_rsa", "chmod g-w,o-w ~", "touch ~/VM_CREATED_ON_\"$(date +%Y-%m-%d_%H-%M-%S)\""]
   }
   provisioner "shell" {
     # only            = ["*.arch"]

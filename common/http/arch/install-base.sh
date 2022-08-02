@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Adapted from: https://github.com/conao3/packer-manjaro/blob/master/scripts/install-base.sh
+# Adapted from: https://github.com/elasticdog/packer-arch/blob/master/scripts/install-base.sh
 # Reference: https://www.tecmint.com/arch-linux-installation-and-configuration-guide/
 # Reference: https://github.com/badele/archlinux-auto-install/blob/main/install/install.sh
 
@@ -45,8 +45,10 @@ MIRRORLIST="https://archlinux.org/mirrorlist/?country=${ARCH_MIRROR_COUNTRY}&pro
 # === PRECHECKS ===
 
 if [[ ! -e /sys/firmware/efi/efivars ]] ; then
-    echo "(U)EFI required for this installation. Exiting..."
+    echo "[E] (U)EFI required for this installation. Exiting..."
     return 1
+else
+    echo "[+] (U)EFI detected. continuing installation..."
 fi
 
 # === DISK ===
@@ -78,7 +80,7 @@ curl --silent "${MIRRORLIST}" | sed 's/^#Server/Server/' > /etc/pacman.d/mirrorl
 # pacstrap installation
 sed --in-place 's/.*ParallelDownloads.*/ParallelDownloads = 5/g' /etc/pacman.conf
 yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
-yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-headers linux-firmware intel-ucode archlinux-keyring openssh dhcpcd python vim grub efibootmgr dosfstools os-prober mtools
+yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-headers linux-firmware intel-ucode archlinux-keyring dhcpcd vim openssh python grub efibootmgr dosfstools os-prober mtools
 
 genfstab -U -p "${CHROOT_MOUNT}" > "${CHROOT_MOUNT}"/etc/fstab
 arch-chroot "${CHROOT_MOUNT}" bash -c "
@@ -90,11 +92,11 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
     echo KEYMAP=${KEYMAP} > /etc/vconsole.conf
     sed --in-place s/#${LANGUAGE}/${LANGUAGE}/ /etc/locale.gen
     locale-gen
-    systemctl enable dhcpcd.service sshd.service
+    systemctl enable dhcpcd sshd
 
     # Root
     usermod --password ${ROOT_PASSWORD_CRYPTED} root
-    echo '%wheel ALL=(ALL) ALL' | tee -a /etc/sudoers && visudo -c
+    echo '%wheel ALL=(ALL) ALL' | tee -a /etc/sudoers && visudo -cs
 
     # User
     useradd $USER_NAME --create-home --user-group --password $USER_PASSWORD_CRYPTED --groups wheel
@@ -111,6 +113,10 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
     # Virtualbox UEFI Workaround: https://askubuntu.com/a/573672
     echo -E '\EFI\\${BOOTLOADER_DIR}\grubx64.efi' | tee ${EFI_DIR}/startup.nsh
 "
+
+# === CLEANUP ===
+
+yes | pacman -S --clean --clean --noconfirm
 
 # === DONE ===
 
