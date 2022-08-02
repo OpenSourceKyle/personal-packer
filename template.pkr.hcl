@@ -116,7 +116,7 @@ build {
   provisioner "shell" {
     # only            = ["*.arch"]
     only            = ["virtualbox-iso.arch"]
-    execute_command = "sudo --preserve-env bash '{{ .Path }}'"
+    execute_command = "sudo --preserve-env bash -c '{{ .Path }} --noninteractive'"
     script          = "common/http/arch/install-base.sh"
   }
   # Perform full system update/upgrade

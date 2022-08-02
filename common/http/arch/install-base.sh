@@ -3,7 +3,7 @@
 # Reference: https://www.tecmint.com/arch-linux-installation-and-configuration-guide/
 # Reference: https://github.com/badele/archlinux-auto-install/blob/main/install/install.sh
 
-set -eu
+set -e
 
 # === VARIABLES ===
 
@@ -46,10 +46,81 @@ MIRRORLIST="https://archlinux.org/mirrorlist/?country=${ARCH_MIRROR_COUNTRY}&pro
 
 if [[ ! -e /sys/firmware/efi/efivars ]] ; then
     echo "[E] (U)EFI required for this installation. Exiting..."
-    return 1
+    exit 1
 else
     echo "[+] (U)EFI detected. continuing installation..."
 fi
+
+# --- SCRIPT FUNCTIONS ---
+
+# Yes/No Confirmation Prompt
+# https://stackoverflow.com/a/29436423
+yes_or_no () {
+    while true ; do
+        read -rp "$* [y/n]: " yn
+        case $yn in
+            [Yy]*)
+                echo "Continuing..."
+                break
+                ;;
+            [Nn]*)
+                echo "[!] Aborted"
+                exit  5
+                ;;
+        esac
+    done
+}
+
+# --- SCRIPT ARGS ---
+
+if [[ -z "${1+null}" ]] ; then
+    echo "[E] This script requires commandline arguments!"
+    exit 2
+else
+    echo "[+] CLI ARGS set: ${1}"
+fi
+
+# Prompt user before destructive actions take place when
+# this option is unset (aka provide option to skip prompts)
+INTERACTIVE=1
+
+# Parse script's commandline args
+# https://mywiki.wooledge.org/BashFAQ/035
+while :; do
+    case $1 in
+        -i|--interactive)
+            INTERACTIVE=1
+            ;;
+        -n|--noninteractive)
+            INTERACTIVE=0
+            ;;
+        *)
+            break
+    esac
+    shift
+done
+
+# Safe prompting
+if [[ "$INTERACTIVE" -eq 1 ]] ; then
+    echo '[i] INTERACTIVE MODE... will prompt for destructive values!'
+    echo 'NOTE: Values are not validated... that is YOUR job!'
+
+    echo
+    echo 'For the following disk-related questions, provide FULL-PATH for each'
+    echo '  e.g. /dev/nvme0n1 /dev/nvme0n1p1 /dev/nvme0n1p2'
+    echo
+    echo "─HARDDRIVE :: DISK [$DISK]: " 
+    read -r DISK
+    echo "└─BOOT PARTITION :: DISK_PART_BOOT [$DISK_PART_BOOT]: "
+    read -r DISK_PART_BOOT
+    echo "└─ROOT PARTITION :: DISK_PART_ROOT [$DISK_PART_ROOT]: "
+    read -r DISK_PART_ROOT
+    echo
+
+    yes_or_no "Values collected... Ready to continue?"
+fi
+
+set -u
 
 # === DISK ===
 
