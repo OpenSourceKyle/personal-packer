@@ -7,8 +7,6 @@ set -e
 
 # === VARIABLES ===
 
-# TODO: SETUP manually setting of drive and partition variables (for SSD)
-
 # Discern main disk drive to provision (QEMU & VBox compatible)
 DISK=/dev/$(lsblk --output NAME,TYPE | grep disk | awk '{print $1}' | grep --extended-regexp '.da|nvme' | tail -n1)
 DISK_PART_BOOT="${DISK}1"
@@ -44,11 +42,19 @@ MIRRORLIST="https://archlinux.org/mirrorlist/?country=${ARCH_MIRROR_COUNTRY}&pro
 
 # === PRECHECKS ===
 
+# Auto-detect MBR (BIOS) or (U)EFI
 if [[ ! -e /sys/firmware/efi/efivars ]] ; then
-    echo "[E] (U)EFI required for this installation. Exiting..."
-    exit 1
+    echo "[i] Detected MBR..."
+    GRUB_PART_TYPE="ef02"
+    GRUB_PKGS=""
+    GRUB_TARGET="i386-pc"
+    GRUB_INSTALL_PARAMS=""
 else
-    echo "[+] (U)EFI detected. continuing installation..."
+    echo "[i] Detected (U)EFI..."
+    GRUB_PART_TYPE="ef00"
+    GRUB_PKGS="efibootmgr dosfstools os-prober mtools"
+    GRUB_TARGET="x86_64-efi"
+    GRUB_INSTALL_PARAMS="--bootloader-id=${BOOTLOADER_DIR} --efi-directory=${EFI_DIR}"
 fi
 
 # --- SCRIPT FUNCTIONS ---
@@ -109,6 +115,8 @@ if [[ "$INTERACTIVE" -eq 1 ]] ; then
     echo 'For the following disk-related questions, provide FULL-PATH for each'
     echo '  e.g. /dev/nvme0n1 /dev/nvme0n1p1 /dev/nvme0n1p2'
     echo
+    lsblk
+    echo
     echo "─HARDDRIVE :: DISK [$DISK]: " 
     read -r DISK
     echo "└─BOOT PARTITION :: DISK_PART_BOOT [$DISK_PART_BOOT]: "
@@ -131,8 +139,8 @@ sgdisk --zap "${DISK}"
 dd if=/dev/zero of="${DISK}" bs=512 count=2048
 wipefs --all "${DISK}"
 
-# Create EFI partition: size, type EFI (ef00), named, attribute bootable
-sgdisk --new=1:0:+550M --typecode=1:ef00 --change-name=1:boot_efi --attributes=1:set:2 "${DISK}"
+# Create EFI partition: size, type EFI (ef00) or MBR (ef02), named, attribute bootable
+sgdisk --new=1:0:+550M --typecode=1:${GRUB_PART_TYPE} --change-name=1:boot --attributes=1:set:2 "${DISK}"
 # Create root partition: remaining free space, type Linux (8300), named
 sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:root "${DISK}"
 # Creating /boot filesystem (FAT32)
@@ -151,7 +159,7 @@ curl --silent "${MIRRORLIST}" | sed 's/^#Server/Server/' > /etc/pacman.d/mirrorl
 # pacstrap installation
 sed --in-place 's/.*ParallelDownloads.*/ParallelDownloads = 5/g' /etc/pacman.conf
 yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
-yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-headers linux-firmware intel-ucode archlinux-keyring dhcpcd vim openssh python grub efibootmgr dosfstools os-prober mtools
+yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-headers linux-firmware intel-ucode archlinux-keyring dhcpcd vim openssh python grub ${GRUB_PKGS}
 
 genfstab -U -p "${CHROOT_MOUNT}" > "${CHROOT_MOUNT}"/etc/fstab
 arch-chroot "${CHROOT_MOUNT}" bash -c "
@@ -179,7 +187,7 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
 mount --options noatime,errors=remount-ro --mkdir "${DISK_PART_BOOT}" "${CHROOT_MOUNT}${EFI_DIR}"
 # Install GRUB UEFI
 arch-chroot "${CHROOT_MOUNT}" bash -c "
-    grub-install --target=x86_64-efi --bootloader-id=${BOOTLOADER_DIR} --efi-directory=${EFI_DIR} ${DISK}
+    grub-install --target=${GRUB_TARGET} ${GRUB_INSTALL_PARAMS} ${DISK}
     grub-mkconfig --output /boot/grub/grub.cfg
     # Virtualbox UEFI Workaround: https://askubuntu.com/a/573672
     echo -E '\EFI\\${BOOTLOADER_DIR}\grubx64.efi' | tee ${EFI_DIR}/startup.nsh
