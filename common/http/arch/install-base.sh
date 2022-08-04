@@ -42,16 +42,14 @@ MIRRORLIST="https://archlinux.org/mirrorlist/?country=${ARCH_MIRROR_COUNTRY}&pro
 
 # === PRECHECKS ===
 
-# Auto-detect MBR (BIOS) or (U)EFI
+# Auto-detect BIOS or (U)EFI
 if [[ ! -e /sys/firmware/efi/efivars ]] ; then
-    echo "[i] Detected MBR..."
-    GRUB_PART_TYPE="ef02"
+    echo "[i] Detected BIOS..."
     GRUB_PKGS=""
     GRUB_TARGET="i386-pc"
     GRUB_INSTALL_PARAMS=""
 else
     echo "[i] Detected (U)EFI..."
-    GRUB_PART_TYPE="ef00"
     GRUB_PKGS="efibootmgr dosfstools os-prober mtools"
     GRUB_TARGET="x86_64-efi"
     GRUB_INSTALL_PARAMS="--bootloader-id=${BOOTLOADER_DIR} --efi-directory=${EFI_DIR}"
@@ -133,20 +131,34 @@ set -u
 # === DISK ===
 
 # Clearing partition table on "${DISK}"
-sgdisk --zap "${DISK}"
+sgdisk --zap-all "${DISK}"
 
 # Destroying magic strings and signatures on "${DISK}"
 dd if=/dev/zero of="${DISK}" bs=512 count=2048
 wipefs --all "${DISK}"
 
-# Create EFI partition: size, type EFI (ef00) or MBR (ef02), named, attribute bootable
-sgdisk --new=1:0:+550M --typecode=1:${GRUB_PART_TYPE} --change-name=1:boot --attributes=1:set:2 "${DISK}"
-# Create root partition: remaining free space, type Linux (8300), named
-sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:root "${DISK}"
-# Creating /boot filesystem (FAT32)
-mkfs.fat -F32 -n BOOT_EFI "${DISK_PART_BOOT}"
+# (U)EFI
+# https://wiki.archlinux.org/title/Installation_guide#Example_layouts
+if [[ -e /sys/firmware/efi/efivars ]] ; then
+    # Create EFI partition: 550MB size, type EFI (ef00), named, attribute bootable
+    sgdisk --new=1:0:+550M --typecode=1:ef00 --change-name=1:boot --attributes=1:set:2 "${DISK}"
+    # Create root partition: remaining free space, type Linux (8300), named
+    sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:root "${DISK}"
+    
+    # Creating /boot filesystem (FAT32)
+    yes | mkfs.fat -F 32 -n BOOT "${DISK_PART_BOOT}"
+
+# BIOS
+# https://wiki.archlinux.org/title/Partitioning#BIOS/GPT_layout_example
+else
+    # Create BIOS parition: 1MB size, type BIOS (ef02), named, attribute bootable
+    sgdisk --new=1:0:+1M --typecode=1:ef02 --change-name=1:boot --attributes=1:set:2 "${DISK}"
+    # Create root partition: type Linux (8300), named
+    sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:root "${DISK}"
+fi
+
 # Creating /root filesystem (ext4)
-mkfs.ext4 -O ^64bit -F -m 0 -L root "${DISK_PART_ROOT}"
+yes | mkfs.ext4 -F -m 0 -L root "${DISK_PART_ROOT}"
 
 # Mounting "${DISK_PART_ROOT}" to "${CHROOT_MOUNT}"
 mount "${DISK_PART_ROOT}" "${CHROOT_MOUNT}"
@@ -183,8 +195,10 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
 
 # === BOOT ===
 
-# Mount boot drive
-mount --options noatime,errors=remount-ro --mkdir "${DISK_PART_BOOT}" "${CHROOT_MOUNT}${EFI_DIR}"
+if [[ -e /sys/firmware/efi/efivars ]] ; then
+    # Mount boot drive
+    mount --options noatime,errors=remount-ro --mkdir "${DISK_PART_BOOT}" "${CHROOT_MOUNT}${EFI_DIR}"
+fi
 # Install GRUB UEFI
 arch-chroot "${CHROOT_MOUNT}" bash -c "
     grub-install --target=${GRUB_TARGET} ${GRUB_INSTALL_PARAMS} ${DISK}
