@@ -2,12 +2,22 @@
 # packer validate .
 
 variable "iso_kali" {
-  type    = list(string)
-  default = ["kali-linux-2022.1-installer-amd64.iso", "https://cdimage.kali.org/kali-2022.1/kali-linux-2022.1-installer-amd64.iso"]
+  type    = string
+  default = "https://kali.download/base-images/current/kali-linux-2022.2-installer-amd64.iso"
 }
 variable "iso_kali_hash" {
   type    = string
-  default = "784e403bd58e5b05e5c24d91dc44e405fb02674bb85ee0b290e0f2ea16113a39"
+  default = "file:https://kali.download/base-images/current/SHA256SUMS"
+}
+
+variable "iso_arch" {
+  type    = string
+  default = "https://mirrors.edge.kernel.org/archlinux/iso/latest/archlinux-x86_64.iso"
+}
+
+variable "iso_arch_hash" {
+  type    = string
+  default = "file:https://mirrors.edge.kernel.org/archlinux/iso/latest/sha256sums.txt"
 }
 
 # --- Local Builds only ---
@@ -34,7 +44,24 @@ variable "boot_wait_debian_kali" {
 
 variable "full_system_upgrade_command_debian_kali" {
   type    = string
-  default = "export DEBIAN_FRONTEND=noninteractive ; echo '* libraries/restart-without-asking boolean true' | sudo debconf-set-selections ; sudo bash -E -c 'apt update -y && yes | apt dist-upgrade -y'"
+  default = "export DEBIAN_FRONTEND=noninteractive ; echo '* libraries/restart-without-asking boolean true' | sudo debconf-set-selections ; sudo bash -E -c 'apt update --yes && yes | apt dist-upgrade --yes'"
+}
+
+variable "boot_command_arch" {
+  type = list(string)
+  default = [
+    "<enter><wait40>",
+    "curl --silent http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh | bash <enter><wait5>"
+  ]
+}
+variable "boot_wait_arch" {
+  type    = string
+  default = "5s"
+}
+
+variable "full_system_upgrade_command_arch" {
+  type    = string
+  default = "pacman -S --refresh --refresh --sysupgrade --noconfirm"
 }
 
 variable "http_directory" {
@@ -48,7 +75,7 @@ variable "preeed_server_port_min" {
 }
 variable "preeed_server_port_max" {
   type    = number
-  default = 8005
+  default = 8010
 }
 
 variable "cpus" {

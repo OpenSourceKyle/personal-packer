@@ -1,0 +1,230 @@
+#!/usr/bin/env bash
+# Adapted from: https://github.com/elasticdog/packer-arch/blob/master/scripts/install-base.sh
+# Reference: https://www.tecmint.com/arch-linux-installation-and-configuration-guide/
+# Reference: https://github.com/badele/archlinux-auto-install/blob/main/install/install.sh
+
+set -e
+
+# === VARIABLES ===
+
+# Discern main disk drive to provision (QEMU & VBox compatible)
+# NOTE: This will automatically prefer SSDs (nvme) over normal harddisks (sda)
+DISK=/dev/$(lsblk --output NAME,TYPE --sort NAME | grep disk | awk '{print $1}' | grep --extended-regexp '.da|nvme' | sort --reverse | tail -n1)
+# nvmeXnXpX format
+if [[ "${DISK}" = *nvme* ]] ; then
+    DISK_PART_BOOT="${DISK}p1"
+    DISK_PART_ROOT="${DISK}p2"
+# sdX format
+else
+    DISK_PART_BOOT="${DISK}1"
+    DISK_PART_ROOT="${DISK}2"
+fi
+
+HOSTNAME='arch.localhost'
+KEYMAP='us'
+LANGUAGE='en_US.UTF-8'
+TIMEZONE='US/Chicago'  # from /usr/share/zoneinfo/
+
+# https://stackoverflow.com/a/28085062
+: "${ARCH_MIRROR_COUNTRY:=US}"
+
+# Reference: https://unix.stackexchange.com/a/361789
+# ROOT_PASSWORD="$(< /dev/urandom tr -cd '[:print:]' | head -c 20)" # generates random password
+ROOT_PASSWORD="root"
+
+USER_NAME='user'
+USER_PASSWORD='user'
+
+# --- do NOT modify ---
+
+CHROOT_MOUNT='/mnt'
+# Bootloader: ${EFI_DIR}/EFI/${BOOTLOADER_DIR}/grubx64.efi
+EFI_DIR='/boot/efi'
+BOOTLOADER_DIR='boot'
+
+# TODO: Warning: truncating password to 8 characters
+ROOT_PASSWORD_CRYPTED=$(openssl passwd -crypt "$ROOT_PASSWORD")
+USER_PASSWORD_CRYPTED=$(openssl passwd -crypt "$USER_PASSWORD")
+
+MIRRORLIST="https://archlinux.org/mirrorlist/?country=${ARCH_MIRROR_COUNTRY}&protocol=https&ip_version=4&use_mirror_status=on"
+
+# --- SCRIPT FUNCTIONS ---
+
+# Yes/No Confirmation Prompt
+# https://stackoverflow.com/a/29436423
+yes_or_no () {
+    while true ; do
+        read -rp "$* [y/n]: " yn
+        case $yn in
+            [Yy]*)
+                echo "Continuing..."
+                break
+                ;;
+            [Nn]*)
+                echo "[!] Aborted"
+                exit  5
+                ;;
+        esac
+    done
+}
+
+# === PRECHECKS ===
+
+# --- SCRIPT ARGS ---
+
+if [[ -z "${1+null}" ]] ; then
+    echo "[E] This script requires commandline arguments!"
+    exit 2
+else
+    echo "[+] CLI ARGS set: ${1}"
+fi
+
+# Prompt user before destructive actions take place when
+# this option is unset (aka provide option to skip prompts)
+INTERACTIVE=1
+
+# Parse script's commandline args
+# https://mywiki.wooledge.org/BashFAQ/035
+while :; do
+    case $1 in
+        -i|--interactive)
+            INTERACTIVE=1
+            ;;
+        -n|--noninteractive)
+            INTERACTIVE=0
+            ;;
+        *)
+            break
+    esac
+    shift
+done
+
+# Safe prompting
+if [[ "$INTERACTIVE" -eq 1 ]] ; then
+    echo '[i] INTERACTIVE MODE... will prompt for destructive values!'
+    echo 'NOTE: Values are not validated... that is YOUR job!'
+
+    echo
+    echo 'For the following disk-related questions, provide FULL-PATH for each'
+    echo '  e.g. /dev/nvme0n1 /dev/nvme0n1p1 /dev/nvme0n1p2'
+    echo
+    lsblk
+    echo
+    echo "─HARDDRIVE :: DISK [$DISK]: " 
+    read -r DISK
+    echo "└─BOOT PARTITION :: DISK_PART_BOOT [$DISK_PART_BOOT]: "
+    read -r DISK_PART_BOOT
+    echo "└─ROOT PARTITION :: DISK_PART_ROOT [$DISK_PART_ROOT]: "
+    echo "NOTE: in MBR only, DISK_PART_ROOT will be set to DISK_PART_BOOT automatically"
+    read -r DISK_PART_ROOT
+    echo
+
+    yes_or_no "Values collected... Ready to continue?"
+fi
+
+set -u
+
+# === DISK ===
+
+# Clearing partition table on "${DISK}"
+sgdisk --zap-all "${DISK}"
+
+# Destroying magic strings and signatures on "${DISK}"
+dd if=/dev/zero of="${DISK}" bs=512 count=2048
+wipefs --all "${DISK}"
+
+if [[ -e /sys/firmware/efi/efivars ]] ; then
+    # (U)EFI
+    # https://wiki.archlinux.org/title/Installation_guide#Example_layouts
+    echo "[i] Detected (U)EFI... will use GPT."
+    GRUB_PKGS="efibootmgr dosfstools os-prober mtools"
+    GRUB_TARGET="x86_64-efi"
+    GRUB_INSTALL_PARAMS="--bootloader-id=${BOOTLOADER_DIR} --efi-directory=${EFI_DIR}"
+
+    # Create EFI partition: 550MB size, type EFI (ef00), named, attribute bootable
+    sgdisk --new=1:0:+550M --typecode=1:ef00 --change-name=1:boot --attributes=1:set:2 "${DISK}"
+    # Create root partition: remaining free space, type Linux (8300), named
+    sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:root "${DISK}"
+    
+    # Creating /boot filesystem (FAT32)
+    yes | mkfs.fat -F 32 -n BOOT "${DISK_PART_BOOT}"
+
+else
+    # BIOS
+    # https://wiki.archlinux.org/title/Partitioning#BIOS/MBR_layout_example
+    echo "[i] Detected BIOS... will use MBR."
+    GRUB_PKGS=""
+    GRUB_TARGET="i386-pc"
+    GRUB_INSTALL_PARAMS=""
+    DISK_PART_ROOT="$DISK_PART_BOOT"  # only 1 partition needed for BIOS & MBR
+    
+    # Reference: https://www.man7.org/linux/man-pages/man8/sfdisk.8.html
+    # "Header lines": set disk as MBR
+    echo 'label: dos' | sfdisk "${DISK}"
+    # "Named-fields format": start & size implied (1MB to end), boot active, 83 Linux type
+    echo 'bootable, type=83' | sfdisk "${DISK}"
+fi
+
+# Creating /root filesystem (ext4)
+yes | mkfs.ext4 -F -m 0 -L root "${DISK_PART_ROOT}"
+
+# Mounting "${DISK_PART_ROOT}" to "${CHROOT_MOUNT}"
+mount "${DISK_PART_ROOT}" "${CHROOT_MOUNT}"
+    
+# Mount boot drive
+# NOTE: it must be mounted in this order for (U)EFI only
+if [[ -e /sys/firmware/efi/efivars ]] ; then
+    mount --mkdir "${DISK_PART_BOOT}" "${CHROOT_MOUNT}${EFI_DIR}"
+fi
+
+# === SYSTEM CONFIG ===
+
+timedatectl set-ntp true
+
+# Setting pacman ${ARCH_MIRROR_COUNTRY} mirrors
+curl --silent "${MIRRORLIST}" | sed 's/^#Server/Server/' > /etc/pacman.d/mirrorlist
+
+# pacstrap installation
+sed --in-place 's/.*ParallelDownloads.*/ParallelDownloads = 5/g' /etc/pacman.conf
+yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
+yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-headers linux-firmware intel-ucode archlinux-keyring dhcpcd vim openssh python grub ${GRUB_PKGS}
+
+genfstab -U -p "${CHROOT_MOUNT}" > "${CHROOT_MOUNT}"/etc/fstab
+arch-chroot "${CHROOT_MOUNT}" bash -c "
+    # Machine
+    echo ${HOSTNAME} > /etc/hostname
+    ln --symbolic --force /usr/share/zoneinfo/${TIMEZONE} /etc/localtime
+    hwclock --systohc
+    echo KEYMAP=${KEYMAP} > /etc/vconsole.conf
+    sed --in-place s/#${LANGUAGE}/${LANGUAGE}/ /etc/locale.gen
+    locale-gen
+    systemctl enable dhcpcd sshd
+
+    # Root User
+    usermod --password ${ROOT_PASSWORD_CRYPTED} root
+    echo '%wheel ALL=(ALL) ALL' | tee --append /etc/sudoers && visudo --check --strict
+
+    # Unprivileged User
+    useradd $USER_NAME --create-home --user-group --password $USER_PASSWORD_CRYPTED --groups wheel
+"
+
+# === BOOT ===
+
+# Install GRUB UEFI
+arch-chroot "${CHROOT_MOUNT}" bash -c "
+    grub-install --target=${GRUB_TARGET} ${GRUB_INSTALL_PARAMS} ${DISK}
+    grub-mkconfig --output /boot/grub/grub.cfg
+    
+    # Virtualbox UEFI Workaround: https://askubuntu.com/a/573672
+    if [[ -e /sys/firmware/efi/efivars ]] ; then
+        echo -E '\EFI\\${BOOTLOADER_DIR}\grubx64.efi' | tee ${EFI_DIR}/startup.nsh
+    fi
+"
+
+# === CLEANUP ===
+
+yes | pacman -S --clean --clean --noconfirm
+
+# === DONE ===
+
+echo -e "\n===>>> BASE INSTALLATION COMPLETE <<<===\n"

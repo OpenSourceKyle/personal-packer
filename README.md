@@ -10,21 +10,55 @@ Locally build Virtual Machines from-scratch using 1-command.
 
 # Usage
 
+## Build
 ```shell
 # Build all templates
+# NOTE: not recommended since multiple virtualization platforms are
+# supported in this template, which conflict (e.g. QEMU & Virtualbox)
 packer build .
 
-# Debug mode
-### shows very verbose output, GUI while installing, and prompts user on errors
-PACKER_LOG=1 packer build -var="dont_display_gui=false" -on-error=ask .
+# --- QEMU ---
+
+# Arch
+packer build -only 'qemu.arch' .
+
+# Kali
+packer build -only 'qemu.kali' .
+
+# --- Virtualbox ---
+
+# Arch
+packer build -only 'virtualbox-iso.arch' .
+
+# Kali
+packer build -only 'virtualbox-iso.kali' .
+
+# Kali Latest Image (ascertain version via curl)
+packer build \
+    -only 'virtualbox-iso.kali' \
+    -var="iso_kali=https://cdimage.kali.org/current/$(curl -so- https://cdimage.kali.org/current/ | grep -oP 'kali-linux-.*?-installer.amd64.iso' | uniq)" \
+    .
+```
+
+## Debug
+```shell
+# Shows very verbose output, GUI while installing, and prompts user on errors
+PACKER_LOG=1 packer build \
+    -var="dont_display_gui=false" \
+    -on-error=ask \
+    .
 
 # Overwrite pre-set variable via CLI arg in key=value format:
 ### ACTION: Do NOT perform full system upgrade after installation (to minimize build time)
 ### NOTE: this works by overwriting the system update command to a 'nop' command 
 ### NOTE: this cannot be an empty string or the build will fail (at the very end!)
 ### NOTE: the arg must be in variables.pkr.hcl
-packer build -var="full_system_upgrade_command_debian_kali=echo do not update" .
+packer build \
+    -var="full_system_upgrade_command_debian_kali=echo do not update" \
+    .
 ```
+
+---
 
 ## Sample Build Times
 
@@ -39,6 +73,13 @@ _this time will largely depend on how out-of-date the ISO is versus the current 
 #### Without full system upgrade
 * 27 minutes 14 seconds
 
+### Arch (as of August 2022)
+
+NOTE: Arch can be built to UEFI/GPT or BIOS/MBR and should automatically detect and set all the respective values for each.
+
+#### Minimal build
+* 3 minutes 12 seconds
+
 # Troubleshooting Common Issues:
 
 Some simple solutions to common problems.
@@ -49,12 +90,14 @@ Packer deletes a VM by default on failure instead of asking. By keeping the VM (
 
 ```shell
 # Add the argument `-on-error=ask` after the subcommand like:
-packer build -on-error=ask .
+packer build \
+    -on-error=ask \
+    .
 ```
 
 ## Show debug output
 
-Packer only has debug output, which is similar to setting a verbosity option (e.g. "-v" or "--verbose") in other programs.
+Packer only has debug output, which is similar to setting a verbosity option (e.g. `-v` or `--verbose`) in other programs.
 
 ```shell
 # Append `PACKER_LOG=1` environment variable to a packer run like:
@@ -72,3 +115,5 @@ Templates can be useful examples, and there are many such templates on the Inter
 - some templates might not work because they are simply out-of-date with newer packer versions
 
 * [Unofficial Packer Templates](https://github.com/chef/bento/tree/main/packer_templates)
+* [Arch Packer Template 1](https://github.com/conao3/packer-manjaro/blob/master/manjaro-template.json)
+* [Arch Packer Template 2](https://github.com/safenetwork-community/mai-in-a-box)
