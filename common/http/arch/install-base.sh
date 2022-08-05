@@ -8,9 +8,17 @@ set -e
 # === VARIABLES ===
 
 # Discern main disk drive to provision (QEMU & VBox compatible)
-DISK=/dev/$(lsblk --output NAME,TYPE | grep disk | awk '{print $1}' | grep --extended-regexp '.da|nvme' | tail -n1)
-DISK_PART_BOOT="${DISK}1"
-DISK_PART_ROOT="${DISK}2"
+# NOTE: This will automatically prefer SSDs (nvme) over normal harddisks (sda)
+DISK=/dev/$(lsblk --output NAME,TYPE --sort NAME | grep disk | awk '{print $1}' | grep --extended-regexp '.da|nvme' | sort --reverse | tail -n1)
+# nvmeXnXpX format
+if [[ "${DISK}" = *nvme* ]] ; then
+    DISK_PART_BOOT="${DISK}p1"
+    DISK_PART_ROOT="${DISK}p2"
+# sdX format
+else
+    DISK_PART_BOOT="${DISK}1"
+    DISK_PART_ROOT="${DISK}2"
+fi
 
 HOSTNAME='arch.localhost'
 KEYMAP='us'
@@ -40,21 +48,6 @@ USER_PASSWORD_CRYPTED=$(openssl passwd -crypt "$USER_PASSWORD")
 
 MIRRORLIST="https://archlinux.org/mirrorlist/?country=${ARCH_MIRROR_COUNTRY}&protocol=https&ip_version=4&use_mirror_status=on"
 
-# === PRECHECKS ===
-
-# Auto-detect BIOS or (U)EFI
-if [[ ! -e /sys/firmware/efi/efivars ]] ; then
-    echo "[i] Detected BIOS..."
-    GRUB_PKGS=""
-    GRUB_TARGET="i386-pc"
-    GRUB_INSTALL_PARAMS=""
-else
-    echo "[i] Detected (U)EFI..."
-    GRUB_PKGS="efibootmgr dosfstools os-prober mtools"
-    GRUB_TARGET="x86_64-efi"
-    GRUB_INSTALL_PARAMS="--bootloader-id=${BOOTLOADER_DIR} --efi-directory=${EFI_DIR}"
-fi
-
 # --- SCRIPT FUNCTIONS ---
 
 # Yes/No Confirmation Prompt
@@ -74,6 +67,8 @@ yes_or_no () {
         esac
     done
 }
+
+# === PRECHECKS ===
 
 # --- SCRIPT ARGS ---
 
@@ -120,6 +115,7 @@ if [[ "$INTERACTIVE" -eq 1 ]] ; then
     echo "└─BOOT PARTITION :: DISK_PART_BOOT [$DISK_PART_BOOT]: "
     read -r DISK_PART_BOOT
     echo "└─ROOT PARTITION :: DISK_PART_ROOT [$DISK_PART_ROOT]: "
+    echo "NOTE: in MBR only, DISK_PART_ROOT will be set to DISK_PART_BOOT automatically"
     read -r DISK_PART_ROOT
     echo
 
@@ -137,9 +133,14 @@ sgdisk --zap-all "${DISK}"
 dd if=/dev/zero of="${DISK}" bs=512 count=2048
 wipefs --all "${DISK}"
 
-# (U)EFI
-# https://wiki.archlinux.org/title/Installation_guide#Example_layouts
 if [[ -e /sys/firmware/efi/efivars ]] ; then
+    # (U)EFI
+    # https://wiki.archlinux.org/title/Installation_guide#Example_layouts
+    echo "[i] Detected (U)EFI... will use GPT."
+    GRUB_PKGS="efibootmgr dosfstools os-prober mtools"
+    GRUB_TARGET="x86_64-efi"
+    GRUB_INSTALL_PARAMS="--bootloader-id=${BOOTLOADER_DIR} --efi-directory=${EFI_DIR}"
+
     # Create EFI partition: 550MB size, type EFI (ef00), named, attribute bootable
     sgdisk --new=1:0:+550M --typecode=1:ef00 --change-name=1:boot --attributes=1:set:2 "${DISK}"
     # Create root partition: remaining free space, type Linux (8300), named
@@ -148,13 +149,20 @@ if [[ -e /sys/firmware/efi/efivars ]] ; then
     # Creating /boot filesystem (FAT32)
     yes | mkfs.fat -F 32 -n BOOT "${DISK_PART_BOOT}"
 
-# BIOS
-# https://wiki.archlinux.org/title/Partitioning#BIOS/GPT_layout_example
 else
-    # Create BIOS parition: 1MB size, type BIOS (ef02), named, attribute bootable
-    sgdisk --new=1:0:+1M --typecode=1:ef02 --change-name=1:boot --attributes=1:set:2 "${DISK}"
-    # Create root partition: type Linux (8300), named
-    sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:root "${DISK}"
+    # BIOS
+    # https://wiki.archlinux.org/title/Partitioning#BIOS/MBR_layout_example
+    echo "[i] Detected BIOS... will use MBR."
+    GRUB_PKGS=""
+    GRUB_TARGET="i386-pc"
+    GRUB_INSTALL_PARAMS=""
+    DISK_PART_ROOT="$DISK_PART_BOOT"  # only 1 partition needed for BIOS & MBR
+    
+    # Reference: https://www.man7.org/linux/man-pages/man8/sfdisk.8.html
+    # "Header lines": set disk as MBR
+    echo 'label: dos' | sfdisk "${DISK}"
+    # "Named-fields format": start & size implied (1MB to end), boot active, 83 Linux type
+    echo 'bootable, type=83' | sfdisk "${DISK}"
 fi
 
 # Creating /root filesystem (ext4)
@@ -162,8 +170,16 @@ yes | mkfs.ext4 -F -m 0 -L root "${DISK_PART_ROOT}"
 
 # Mounting "${DISK_PART_ROOT}" to "${CHROOT_MOUNT}"
 mount "${DISK_PART_ROOT}" "${CHROOT_MOUNT}"
+    
+# Mount boot drive
+# NOTE: it must be mounted in this order for (U)EFI only
+if [[ -e /sys/firmware/efi/efivars ]] ; then
+    mount --mkdir "${DISK_PART_BOOT}" "${CHROOT_MOUNT}${EFI_DIR}"
+fi
 
 # === SYSTEM CONFIG ===
+
+timedatectl set-ntp true
 
 # Setting pacman ${ARCH_MIRROR_COUNTRY} mirrors
 curl --silent "${MIRRORLIST}" | sed 's/^#Server/Server/' > /etc/pacman.d/mirrorlist
@@ -179,32 +195,30 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
     echo ${HOSTNAME} > /etc/hostname
     ln --symbolic --force /usr/share/zoneinfo/${TIMEZONE} /etc/localtime
     hwclock --systohc
-    timedatectl set-ntp true
     echo KEYMAP=${KEYMAP} > /etc/vconsole.conf
     sed --in-place s/#${LANGUAGE}/${LANGUAGE}/ /etc/locale.gen
     locale-gen
     systemctl enable dhcpcd sshd
 
-    # Root
+    # Root User
     usermod --password ${ROOT_PASSWORD_CRYPTED} root
-    echo '%wheel ALL=(ALL) ALL' | tee -a /etc/sudoers && visudo -cs
+    echo '%wheel ALL=(ALL) ALL' | tee --append /etc/sudoers && visudo --check --strict
 
-    # User
+    # Unprivileged User
     useradd $USER_NAME --create-home --user-group --password $USER_PASSWORD_CRYPTED --groups wheel
 "
 
 # === BOOT ===
 
-if [[ -e /sys/firmware/efi/efivars ]] ; then
-    # Mount boot drive
-    mount --options noatime,errors=remount-ro --mkdir "${DISK_PART_BOOT}" "${CHROOT_MOUNT}${EFI_DIR}"
-fi
 # Install GRUB UEFI
 arch-chroot "${CHROOT_MOUNT}" bash -c "
     grub-install --target=${GRUB_TARGET} ${GRUB_INSTALL_PARAMS} ${DISK}
     grub-mkconfig --output /boot/grub/grub.cfg
+    
     # Virtualbox UEFI Workaround: https://askubuntu.com/a/573672
-    echo -E '\EFI\\${BOOTLOADER_DIR}\grubx64.efi' | tee ${EFI_DIR}/startup.nsh
+    if [[ -e /sys/firmware/efi/efivars ]] ; then
+        echo -E '\EFI\\${BOOTLOADER_DIR}\grubx64.efi' | tee ${EFI_DIR}/startup.nsh
+    fi
 "
 
 # === CLEANUP ===

@@ -44,7 +44,7 @@ variable "boot_wait_debian_kali" {
 
 variable "full_system_upgrade_command_debian_kali" {
   type    = string
-  default = "export DEBIAN_FRONTEND=noninteractive ; echo '* libraries/restart-without-asking boolean true' | sudo debconf-set-selections ; sudo bash -E -c 'apt update -y && yes | apt dist-upgrade -y'"
+  default = "export DEBIAN_FRONTEND=noninteractive ; echo '* libraries/restart-without-asking boolean true' | sudo debconf-set-selections ; sudo bash -E -c 'apt update --yes && yes | apt dist-upgrade --yes'"
 }
 
 variable "boot_command_arch" {

@@ -13,6 +13,8 @@ Locally build Virtual Machines from-scratch using 1-command.
 ## Build
 ```shell
 # Build all templates
+# NOTE: not recommended since multiple virtualization platforms are
+# supported in this template, which conflict (e.g. QEMU & Virtualbox)
 packer build .
 
 # --- QEMU ---
@@ -71,7 +73,9 @@ _this time will largely depend on how out-of-date the ISO is versus the current 
 #### Without full system upgrade
 * 27 minutes 14 seconds
 
-### Arch
+### Arch (as of August 2022)
+
+NOTE: Arch can be built to UEFI/GPT or BIOS/MBR and should automatically detect and set all the respective values for each.
 
 #### Minimal build
 * 3 minutes 12 seconds
