@@ -3,6 +3,7 @@
 # Reference: https://www.tecmint.com/arch-linux-installation-and-configuration-guide/
 # Reference: https://github.com/badele/archlinux-auto-install/blob/main/install/install.sh
 
+set -x
 set -e
 
 # === VARIABLES ===
@@ -27,6 +28,14 @@ TIMEZONE='US/Chicago'  # from /usr/share/zoneinfo/
 
 # https://stackoverflow.com/a/28085062
 : "${ARCH_MIRROR_COUNTRY:=US}"
+
+LUKS_PASSWORD='user'
+LUKS_CONTAINER='cryptlvm'
+LUKS_PATH="/dev/mapper/${LUKS_CONTAINER}"
+LVM_VG='LUKS_ROOT'
+LVM_LV_ROOT='root'
+LVM_ROOT_PATH="/dev/${LVM_VG}/${LVM_LV_ROOT}"
+LUKS_LVM_MKINITCPIO_HOOK='HOOKS=(base udev autodetect keyboard keymap consolefont modconf block encrypt lvm2 filesystems fsck)'
 
 # Reference: https://unix.stackexchange.com/a/361789
 # ROOT_PASSWORD="$(< /dev/urandom tr -cd '[:print:]' | head -c 20)" # generates random password
@@ -114,9 +123,12 @@ if [[ "$INTERACTIVE" -eq 1 ]] ; then
     read -r DISK
     echo "└─BOOT PARTITION :: DISK_PART_BOOT [$DISK_PART_BOOT]: "
     read -r DISK_PART_BOOT
-    echo "└─ROOT PARTITION :: DISK_PART_ROOT [$DISK_PART_ROOT]: "
-    echo "NOTE: in MBR only, DISK_PART_ROOT will be set to DISK_PART_BOOT automatically"
-    read -r DISK_PART_ROOT
+    if [[ -e /sys/firmware/efi/efivars ]] ; then
+        echo "└─ROOT PARTITION :: DISK_PART_ROOT [$DISK_PART_ROOT]: "
+        read -r DISK_PART_ROOT
+    else
+        echo "NOTE: in MBR only, DISK_PART_ROOT will be set to DISK_PART_BOOT automatically"
+    fi
     echo
 
     yes_or_no "Values collected... Ready to continue?"
@@ -165,11 +177,20 @@ else
     echo 'bootable, type=83' | sfdisk "${DISK}"
 fi
 
-# Creating /root filesystem (ext4)
-yes | mkfs.ext4 -F -m 0 -L root "${DISK_PART_ROOT}"
+# Create LUKS encrypted container
+echo -n "${LUKS_PASSWORD}" | cryptsetup luksFormat --type luks2 --force-password "${DISK_PART_ROOT}" -
+echo -n "${LUKS_PASSWORD}" | cryptsetup open "${DISK_PART_ROOT}" "${LUKS_CONTAINER}"
+# Create LVM
+pvcreate "${LUKS_PATH}"  # physical group
+vgcreate "${LVM_VG}" "${LUKS_PATH}"  # volume group
+lvcreate -l 100%FREE "${LVM_VG}" --name "${LVM_LV_ROOT}"
 
-# Mounting "${DISK_PART_ROOT}" to "${CHROOT_MOUNT}"
-mount "${DISK_PART_ROOT}" "${CHROOT_MOUNT}"
+# Creating /root filesystem (ext4)
+yes | mkfs.ext4 -F -m 0 -L "${LVM_LV_ROOT}" "${LVM_ROOT_PATH}"
+
+
+# Mounting "${LVM_ROOT_PATH}" to "${CHROOT_MOUNT}"
+mount "${LVM_ROOT_PATH}" "${CHROOT_MOUNT}"
     
 # Mount boot drive
 # NOTE: it must be mounted in this order for (U)EFI only
@@ -186,8 +207,9 @@ curl --silent "${MIRRORLIST}" | sed 's/^#Server/Server/' > /etc/pacman.d/mirrorl
 
 # pacstrap installation
 sed --in-place 's/.*ParallelDownloads.*/ParallelDownloads = 5/g' /etc/pacman.conf
-yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
-yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-headers linux-firmware intel-ucode archlinux-keyring dhcpcd vim openssh python grub ${GRUB_PKGS}
+# Update keyring to avoid corrupted packages; only sometimes needed
+# yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
+yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-headers linux-firmware intel-ucode archlinux-keyring dhcpcd vim openssh python lvm2 grub ${GRUB_PKGS}
 
 genfstab -U -p "${CHROOT_MOUNT}" > "${CHROOT_MOUNT}"/etc/fstab
 arch-chroot "${CHROOT_MOUNT}" bash -c "
@@ -212,6 +234,11 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
 
 # Install GRUB UEFI
 arch-chroot "${CHROOT_MOUNT}" bash -c "
+    # Reconfigure mkinitcpio due to LUKS + LVM
+    sed --in-place 's/^#.*HOOKS.*/${LUKS_LVM_MKINITCPIO_HOOK}/g' /etc/mkinitcpio.conf
+    mkinitcpio --allpresets
+
+    # Install GRUB bootloader
     grub-install --target=${GRUB_TARGET} ${GRUB_INSTALL_PARAMS} ${DISK}
     grub-mkconfig --output /boot/grub/grub.cfg
     
