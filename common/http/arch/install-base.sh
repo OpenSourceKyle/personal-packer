@@ -10,7 +10,7 @@ set -e
 
 # Discern main disk drive to provision (QEMU & VBox compatible)
 # NOTE: This will automatically prefer SSDs (nvme) over normal harddisks (sda)
-DISK=/dev/$(lsblk --output NAME,TYPE --sort NAME | grep disk | awk '{print $1}' | grep --extended-regexp '.da|nvme' | sort --reverse | tail -n1)
+DISK=$(lsblk --paths --output NAME,TYPE --sort NAME | grep disk | awk '{print $1}' | grep --extended-regexp '.da|nvme' | sort --reverse | tail -n1)
 # nvmeXnXpX format
 if [[ "${DISK}" = *nvme* ]] ; then
     DISK_PART_BOOT="${DISK}p1"
@@ -27,19 +27,14 @@ LANGUAGE='en_US.UTF-8'
 TIMEZONE='US/Chicago'  # from /usr/share/zoneinfo/
 
 # https://stackoverflow.com/a/28085062
+# reflector --list-countries
 : "${ARCH_MIRROR_COUNTRY:=US}"
 
 LUKS_PASSWORD='user'
-LUKS_CONTAINER='cryptlvm'
-LUKS_PATH="/dev/mapper/${LUKS_CONTAINER}"
-LVM_VG='LUKS_ROOT'
-LVM_LV_ROOT='root'
-LVM_ROOT_PATH="/dev/${LVM_VG}/${LVM_LV_ROOT}"
-LUKS_LVM_MKINITCPIO_HOOK='HOOKS=(base udev autodetect keyboard keymap consolefont modconf block encrypt lvm2 filesystems fsck)'
 
 # Reference: https://unix.stackexchange.com/a/361789
 # ROOT_PASSWORD="$(< /dev/urandom tr -cd '[:print:]' | head -c 20)" # generates random password
-ROOT_PASSWORD="root"
+ROOT_PASSWORD='root'
 
 USER_NAME='user'
 USER_PASSWORD='user'
@@ -55,7 +50,12 @@ BOOTLOADER_DIR='boot'
 ROOT_PASSWORD_CRYPTED=$(openssl passwd -crypt "$ROOT_PASSWORD")
 USER_PASSWORD_CRYPTED=$(openssl passwd -crypt "$USER_PASSWORD")
 
-MIRRORLIST="https://archlinux.org/mirrorlist/?country=${ARCH_MIRROR_COUNTRY}&protocol=https&ip_version=4&use_mirror_status=on"
+LUKS_CONTAINER='cryptlvm'
+LUKS_PATH="/dev/mapper/${LUKS_CONTAINER}"
+LVM_VG='luks_root'
+LVM_LV_ROOT='root'
+LVM_ROOT_PATH="/dev/${LVM_VG}/${LVM_LV_ROOT}"
+LUKS_LVM_MKINITCPIO_HOOK='HOOKS=(base udev autodetect keyboard keymap consolefont modconf block encrypt lvm2 filesystems fsck)'
 
 # --- SCRIPT FUNCTIONS ---
 
@@ -177,17 +177,20 @@ else
     echo 'bootable, type=83' | sfdisk "${DISK}"
 fi
 
+# LVM on LUKS
+# Reference: https://wiki.archlinux.org/title/Dm-crypt/Encrypting_an_entire_system#LVM_on_LUKS
+
 # Create LUKS encrypted container
-echo -n "${LUKS_PASSWORD}" | cryptsetup luksFormat --type luks2 --force-password "${DISK_PART_ROOT}" -
+# NOTE: Grub supports LUKS1 (LUKS2 not well-supported): https://wiki.archlinux.org/title/GRUB#Encrypted_/boot
+echo -n "${LUKS_PASSWORD}" | cryptsetup luksFormat --type luks1 --force-password "${DISK_PART_ROOT}" -
 echo -n "${LUKS_PASSWORD}" | cryptsetup open "${DISK_PART_ROOT}" "${LUKS_CONTAINER}"
 # Create LVM
 pvcreate "${LUKS_PATH}"  # physical group
 vgcreate "${LVM_VG}" "${LUKS_PATH}"  # volume group
-lvcreate -l 100%FREE "${LVM_VG}" --name "${LVM_LV_ROOT}"
+lvcreate --extents 100%FREE "${LVM_VG}" --name "${LVM_LV_ROOT}"
 
 # Creating /root filesystem (ext4)
 yes | mkfs.ext4 -F -m 0 -L "${LVM_LV_ROOT}" "${LVM_ROOT_PATH}"
-
 
 # Mounting "${LVM_ROOT_PATH}" to "${CHROOT_MOUNT}"
 mount "${LVM_ROOT_PATH}" "${CHROOT_MOUNT}"
@@ -198,22 +201,26 @@ if [[ -e /sys/firmware/efi/efivars ]] ; then
     mount --mkdir "${DISK_PART_BOOT}" "${CHROOT_MOUNT}${EFI_DIR}"
 fi
 
+# After partitioning, discern LUKS device for GRUB
+LUKS_DEVICE_UUID="$(lsblk --noheadings --nodeps --output UUID ${DISK_PART_ROOT})"
+# TODO: add SSD TRIM support https://wiki.archlinux.org/title/Dm-crypt/Specialties#Discard/TRIM_support_for_solid_state_drives_(SSD)
+LUKS_KERNEL_BOOT_PARAM="cryptdevice=UUID=${LUKS_DEVICE_UUID}:${LUKS_CONTAINER} root=${LVM_ROOT_PATH}"
+# LUKS_KERNEL_BOOT_PARAM="cryptdevice=UUID=${LUKS_DEVICE_UUID}:${LUKS_CONTAINER} root=/dev/mapper/${LVM_VG}-${LVM_LV_ROOT}"
+
 # === SYSTEM CONFIG ===
 
+# Sync time
 timedatectl set-ntp true
 
-# Setting pacman ${ARCH_MIRROR_COUNTRY} mirrors
-curl --silent "${MIRRORLIST}" | sed 's/^#Server/Server/' > /etc/pacman.d/mirrorlist
+# Set pkg mirrorlist w/ desired options
+# Reference: https://xyne.dev/projects/reflector/
+reflector --country "${ARCH_MIRROR_COUNTRY}" --ipv4 --latest 10 --completion-percent 100 --protocol https --sort rate --threads 5 --save /etc/pacman.d/mirrorlist
 
 # pacstrap installation
 sed --in-place 's/.*ParallelDownloads.*/ParallelDownloads = 5/g' /etc/pacman.conf
 # Update keyring to avoid corrupted packages; only sometimes needed
-yes | pacman -S --refresh --refresh --noconfirm
-# mv -v /etc/pacman.d/gnupg /tmp/
-# pacman-key --init
-# pacman-key --refresh-keys
 # yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
-# yes | pacman -S --sysupgrade --noconfirm
+# yes | pacman -S --refresh --refresh --noconfirm ca-certificates
 yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-headers linux-firmware intel-ucode archlinux-keyring dhcpcd vim openssh python lvm2 grub ${GRUB_PKGS}
 
 genfstab -U -p "${CHROOT_MOUNT}" > "${CHROOT_MOUNT}"/etc/fstab
@@ -240,11 +247,14 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
 # Install GRUB UEFI
 arch-chroot "${CHROOT_MOUNT}" bash -c "
     # Reconfigure mkinitcpio due to LUKS + LVM
-    sed --in-place 's/^#.*HOOKS.*/${LUKS_LVM_MKINITCPIO_HOOK}/g' /etc/mkinitcpio.conf
-    mkinitcpio --allpresets
+    sed --in-place 's/^[^#]\s*HOOKS.*/${LUKS_LVM_MKINITCPIO_HOOK}/g' /etc/mkinitcpio.conf
+    mkinitcpio --verbose --allpresets
 
+    # Add kernel boot params for LUKS
+    sed --in-place 's#.*GRUB_CMDLINE_LINUX_DEFAULT.*#GRUB_CMDLINE_LINUX_DEFAULT=\"${LUKS_KERNEL_BOOT_PARAM}\"#g' /etc/default/grub
+    echo 'GRUB_ENABLE_CRYPTODISK=y' >> /etc/default/grub
     # Install GRUB bootloader
-    grub-install --target=${GRUB_TARGET} ${GRUB_INSTALL_PARAMS} ${DISK}
+    grub-install --modules='lvm part_gpt part_msdos' --target=${GRUB_TARGET} ${GRUB_INSTALL_PARAMS} ${DISK}
     grub-mkconfig --output /boot/grub/grub.cfg
     
     # Virtualbox UEFI Workaround: https://askubuntu.com/a/573672
@@ -255,7 +265,23 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
 
 # === CLEANUP ===
 
-yes | pacman -S --clean --clean --noconfirm
+arch-chroot "${CHROOT_MOUNT}" bash -c "
+    yes | pacman -S --clean --clean --noconfirm
+
+    # TODO: REMOVE
+    cat /etc/fstab
+    echo '==='
+    cat /etc/mkinitcpio.conf
+    echo '==='
+    cat /etc/default/grub
+
+    echo '==='
+    echo 'dm-crypt'
+    lsmod | grep dm-crypt
+    echo '==='
+    echo 'dm-mod'
+    lsmod | grep dm-mod
+"
 
 # === DONE ===
 
