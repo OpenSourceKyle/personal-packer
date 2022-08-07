@@ -208,7 +208,12 @@ curl --silent "${MIRRORLIST}" | sed 's/^#Server/Server/' > /etc/pacman.d/mirrorl
 # pacstrap installation
 sed --in-place 's/.*ParallelDownloads.*/ParallelDownloads = 5/g' /etc/pacman.conf
 # Update keyring to avoid corrupted packages; only sometimes needed
+yes | pacman -S --refresh --refresh --noconfirm
+# mv -v /etc/pacman.d/gnupg /tmp/
+# pacman-key --init
+# pacman-key --refresh-keys
 # yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
+# yes | pacman -S --sysupgrade --noconfirm
 yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-headers linux-firmware intel-ucode archlinux-keyring dhcpcd vim openssh python lvm2 grub ${GRUB_PKGS}
 
 genfstab -U -p "${CHROOT_MOUNT}" > "${CHROOT_MOUNT}"/etc/fstab
