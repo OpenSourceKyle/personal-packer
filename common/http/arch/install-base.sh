@@ -43,7 +43,7 @@ USER_PASSWORD='user'
 
 CHROOT_MOUNT='/mnt'
 # Bootloader: ${EFI_DIR}/EFI/${BOOTLOADER_DIR}/grubx64.efi
-EFI_DIR='/boot/efi'
+EFI_DIR='/boot'
 BOOTLOADER_DIR='boot'
 
 # TODO: Warning: truncating password to 8 characters
@@ -55,7 +55,8 @@ LUKS_PATH="/dev/mapper/${LUKS_CONTAINER}"
 LVM_VG='luks_root'
 LVM_LV_ROOT='root'
 LVM_ROOT_PATH="/dev/${LVM_VG}/${LVM_LV_ROOT}"
-LUKS_LVM_MKINITCPIO_HOOK='HOOKS=(base udev autodetect keyboard keymap consolefont modconf block encrypt lvm2 filesystems fsck)'
+LUKS_LVM_MKINITCPIO_MODULES='MODULES=(ext4)'
+LUKS_LVM_MKINITCPIO_HOOKS='HOOKS=(base udev autodetect keyboard keymap consolefont modconf block encrypt lvm2 filesystems fsck)'
 
 # --- SCRIPT FUNCTIONS ---
 
@@ -149,7 +150,7 @@ if [[ -e /sys/firmware/efi/efivars ]] ; then
     # (U)EFI
     # https://wiki.archlinux.org/title/Installation_guide#Example_layouts
     echo "[i] Detected (U)EFI... will use GPT."
-    GRUB_PKGS="efibootmgr dosfstools os-prober mtools"
+    GRUB_PKGS="efibootmgr dosfstools mtools"
     GRUB_TARGET="x86_64-efi"
     GRUB_INSTALL_PARAMS="--bootloader-id=${BOOTLOADER_DIR} --efi-directory=${EFI_DIR}"
 
@@ -182,7 +183,7 @@ fi
 
 # Create LUKS encrypted container
 # NOTE: Grub supports LUKS1 (LUKS2 not well-supported): https://wiki.archlinux.org/title/GRUB#Encrypted_/boot
-echo -n "${LUKS_PASSWORD}" | cryptsetup luksFormat --type luks1 --force-password "${DISK_PART_ROOT}" -
+echo -n "${LUKS_PASSWORD}" | cryptsetup luksFormat --type luks --force-password "${DISK_PART_ROOT}" -
 echo -n "${LUKS_PASSWORD}" | cryptsetup open "${DISK_PART_ROOT}" "${LUKS_CONTAINER}"
 # Create LVM
 pvcreate "${LUKS_PATH}"  # physical group
@@ -205,7 +206,6 @@ fi
 LUKS_DEVICE_UUID="$(lsblk --noheadings --nodeps --output UUID ${DISK_PART_ROOT})"
 # TODO: add SSD TRIM support https://wiki.archlinux.org/title/Dm-crypt/Specialties#Discard/TRIM_support_for_solid_state_drives_(SSD)
 LUKS_KERNEL_BOOT_PARAM="cryptdevice=UUID=${LUKS_DEVICE_UUID}:${LUKS_CONTAINER} root=${LVM_ROOT_PATH}"
-# LUKS_KERNEL_BOOT_PARAM="cryptdevice=UUID=${LUKS_DEVICE_UUID}:${LUKS_CONTAINER} root=/dev/mapper/${LVM_VG}-${LVM_LV_ROOT}"
 
 # === SYSTEM CONFIG ===
 
@@ -221,7 +221,7 @@ sed --in-place 's/.*ParallelDownloads.*/ParallelDownloads = 5/g' /etc/pacman.con
 # Update keyring to avoid corrupted packages; only sometimes needed
 # yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
 # yes | pacman -S --refresh --refresh --noconfirm ca-certificates
-yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-headers linux-firmware intel-ucode archlinux-keyring dhcpcd vim openssh python lvm2 grub ${GRUB_PKGS}
+yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-headers linux-firmware intel-ucode archlinux-keyring dhcpcd vim openssh python lvm2 grub os-prober ${GRUB_PKGS}
 
 genfstab -U -p "${CHROOT_MOUNT}" > "${CHROOT_MOUNT}"/etc/fstab
 arch-chroot "${CHROOT_MOUNT}" bash -c "
@@ -247,40 +247,21 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
 # Install GRUB UEFI
 arch-chroot "${CHROOT_MOUNT}" bash -c "
     # Reconfigure mkinitcpio due to LUKS + LVM
-    sed --in-place 's/^[^#]\s*HOOKS.*/${LUKS_LVM_MKINITCPIO_HOOK}/g' /etc/mkinitcpio.conf
-    mkinitcpio --verbose --allpresets
+    sed --in-place 's/^\s*MODULES.*/${LUKS_LVM_MKINITCPIO_MODULES}/g' /etc/mkinitcpio.conf
+    sed --in-place 's/^\s*HOOKS.*/${LUKS_LVM_MKINITCPIO_HOOKS}/g' /etc/mkinitcpio.conf
+    mkinitcpio --allpresets
 
     # Add kernel boot params for LUKS
     sed --in-place 's#.*GRUB_CMDLINE_LINUX_DEFAULT.*#GRUB_CMDLINE_LINUX_DEFAULT=\"${LUKS_KERNEL_BOOT_PARAM}\"#g' /etc/default/grub
-    echo 'GRUB_ENABLE_CRYPTODISK=y' >> /etc/default/grub
     # Install GRUB bootloader
-    grub-install --modules='lvm part_gpt part_msdos' --target=${GRUB_TARGET} ${GRUB_INSTALL_PARAMS} ${DISK}
+    grub-install --removable --recheck --modules='lvm part_gpt part_msdos' --target=${GRUB_TARGET} ${GRUB_INSTALL_PARAMS} ${DISK}
     grub-mkconfig --output /boot/grub/grub.cfg
-    
-    # Virtualbox UEFI Workaround: https://askubuntu.com/a/573672
-    if [[ -e /sys/firmware/efi/efivars ]] ; then
-        echo -E '\EFI\\${BOOTLOADER_DIR}\grubx64.efi' | tee ${EFI_DIR}/startup.nsh
-    fi
 "
 
 # === CLEANUP ===
 
 arch-chroot "${CHROOT_MOUNT}" bash -c "
     yes | pacman -S --clean --clean --noconfirm
-
-    # TODO: REMOVE
-    cat /etc/fstab
-    echo '==='
-    cat /etc/mkinitcpio.conf
-    echo '==='
-    cat /etc/default/grub
-
-    echo '==='
-    echo 'dm-crypt'
-    lsmod | grep dm-crypt
-    echo '==='
-    echo 'dm-mod'
-    lsmod | grep dm-mod
 "
 
 # === DONE ===

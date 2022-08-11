@@ -24,7 +24,6 @@ source "qemu" "baseline" {
 # https://www.packer.io/plugins/builders/virtualbox/iso
 source "virtualbox-iso" "baseline" {
   cpus                 = var.cpus
-  firmware             = "efi"
   memory               = var.memory
   disk_size            = var.disk_size
   guest_additions_mode = "disable"
@@ -42,6 +41,12 @@ source "virtualbox-iso" "baseline" {
   shutdown_timeout = var.shutdown_timeout
 
   iso_target_path = "iso_file"
+
+  firmware        = "efi"
+  keep_registered = true
+  vboxmanage_post = [
+    ["snapshot", "{{.Name}}", "take", "CLEAN BUILD", "--description=Clean build via Packer"],
+  ]
 }
 
 # --- Build Blocks ---
