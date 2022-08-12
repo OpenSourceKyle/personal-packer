@@ -115,15 +115,11 @@ if [[ "$INTERACTIVE" -eq 1 ]] ; then
     read -r DISK
     echo "└─BOOT PARTITION :: DISK_PART_BOOT [$DISK_PART_BOOT]: "
     read -r DISK_PART_BOOT
-    if [[ -e /sys/firmware/efi/efivars ]] ; then
-        echo "└─ROOT PARTITION :: DISK_PART_ROOT [$DISK_PART_ROOT]: "
-        read -r DISK_PART_ROOT
-    else
-        echo "NOTE: in MBR only, DISK_PART_ROOT will be set to DISK_PART_BOOT automatically"
-    fi
+    echo "└─ROOT PARTITION :: DISK_PART_ROOT [$DISK_PART_ROOT]: "
+    read -r DISK_PART_ROOT
     echo
 
-    yes_or_no "Values collected... Ready to continue?"
+    yes_or_no "Values collected... Remember, these are not validated... Ready to continue?"
 fi
 
 set -u
