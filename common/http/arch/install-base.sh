@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
+#
 # Adapted from: https://github.com/elasticdog/packer-arch/blob/master/scripts/install-base.sh
-# Reference: https://www.tecmint.com/arch-linux-installation-and-configuration-guide/
-# Reference: https://github.com/badele/archlinux-auto-install/blob/main/install/install.sh
 
 set -e
 
@@ -87,11 +86,33 @@ fi
 # https://mywiki.wooledge.org/BashFAQ/035
 while :; do
     case $1 in
+        -h|--help)
+            echo
+            echo "USAGE: $0 [options]"
+            echo
+            echo 'NOTE: options MUST be separated by whitespace and cannot be'
+            echo '      combined like so:'
+            echo "          $0 -i -u"
+            echo
+            echo '-i|--interactive              : prompt user for values (e.g. disk to pacstrap)'
+            echo '                                (if set, -n|--noninteractive will be ignored)'
+            echo '-n|--noninteractive           : smartly discern values (e.g. guess disk to pacstrap)'
+            echo '-u|--update-archlinux-keyring : update archlinux-keyring package before pacstrap'
+            echo '                                (only use when pacstrap gives keyring or package issues)'
+            echo
+            exit 0
+            ;;
         -i|--interactive)
             INTERACTIVE=1
             ;;
         -n|--noninteractive)
-            INTERACTIVE=0
+            # If $INTERACTIVE=1, safely ignore
+            if [[ "$INTERACTIVE" -ne 1 ]] ; then
+                INTERACTIVE=0
+            fi
+            ;;
+        -u|--update-archlinux-keyring)
+            UPDATE_ARCHLINUX_KEYRING=1
             ;;
         *)
             break
@@ -264,8 +285,10 @@ sed \
     's/.*ParallelDownloads.*/ParallelDownloads = 5/g' \
     /etc/pacman.conf
 # Update keyring to avoid corrupted packages; only sometimes needed
-# yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
-# yes | pacman -S --refresh --refresh --noconfirm ca-certificates
+if [[ "$UPDATE_ARCHLINUX_KEYRING" -eq 1 ]] ; then
+    yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
+    #yes | pacman -S --refresh --refresh --noconfirm ca-certificates
+fi
 yes | pacstrap "${CHROOT_MOUNT}" \
     base \
     base-devel \
@@ -310,7 +333,7 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
 
 # === BOOT ===
 
-# Install GRUB UEFI
+# Regenerate mkinitcpio and install Grub
 arch-chroot "${CHROOT_MOUNT}" bash -c "
     # Reconfigure mkinitcpio due to LUKS + LVM
     sed --in-place 's/^\s*HOOKS.*/${LUKS_LVM_MKINITCPIO_HOOKS}/g' /etc/mkinitcpio.conf
@@ -325,6 +348,7 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
 
 # === CLEANUP ===
 
+# Cleanup pacman cache before saving VM disk
 arch-chroot "${CHROOT_MOUNT}" bash -c "
     yes | pacman -S --clean --clean --noconfirm
 "
