@@ -112,7 +112,9 @@ while :; do
             fi
             ;;
         -u|--update-archlinux-keyring)
-            UPDATE_ARCHLINUX_KEYRING=1
+            # Update keyring to avoid corrupted packages; only sometimes needed
+            yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
+            #yes | pacman -S --refresh --refresh --noconfirm ca-certificates
             ;;
         *)
             break
@@ -125,7 +127,6 @@ done
 if [[ "$INTERACTIVE" -eq 1 ]] ; then
     echo '[i] INTERACTIVE MODE... will prompt for destructive values!'
     echo '!!! NOTE: Values are not validated... that is YOUR job !!!'
-
     echo
     echo 'For the following disk-related questions, provide FULL-PATH for each'
     echo '  e.g. /dev/nvme0n1 /dev/nvme0n1p1 /dev/nvme0n1p2'
@@ -141,12 +142,6 @@ if [[ "$INTERACTIVE" -eq 1 ]] ; then
     echo
 
     yes_or_no "Values collected... Remember, these are not validated... Ready to continue?"
-fi
-
-# Update keyring to avoid corrupted packages; only sometimes needed
-if [[ "$UPDATE_ARCHLINUX_KEYRING" -eq 1 ]] ; then
-    yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
-    #yes | pacman -S --refresh --refresh --noconfirm ca-certificates
 fi
 
 # ---
