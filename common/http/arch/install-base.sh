@@ -143,6 +143,14 @@ if [[ "$INTERACTIVE" -eq 1 ]] ; then
     yes_or_no "Values collected... Remember, these are not validated... Ready to continue?"
 fi
 
+# Update keyring to avoid corrupted packages; only sometimes needed
+if [[ "$UPDATE_ARCHLINUX_KEYRING" -eq 1 ]] ; then
+    yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
+    #yes | pacman -S --refresh --refresh --noconfirm ca-certificates
+fi
+
+# ---
+
 set -u
 
 # === DISK ===
@@ -284,11 +292,6 @@ sed \
     --in-place \
     's/.*ParallelDownloads.*/ParallelDownloads = 5/g' \
     /etc/pacman.conf
-# Update keyring to avoid corrupted packages; only sometimes needed
-if [[ "$UPDATE_ARCHLINUX_KEYRING" -eq 1 ]] ; then
-    yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
-    #yes | pacman -S --refresh --refresh --noconfirm ca-certificates
-fi
 yes | pacstrap "${CHROOT_MOUNT}" \
     base \
     base-devel \
