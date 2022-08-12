@@ -64,6 +64,11 @@ variable "full_system_upgrade_command_arch" {
   default = "pacman -S --refresh --refresh --sysupgrade --noconfirm"
 }
 
+variable "virtualbox_firmware" {
+  type    = string
+  default = "efi"
+}
+
 variable "http_directory" {
   type    = string
   default = "./common/http"
