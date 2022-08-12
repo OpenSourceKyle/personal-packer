@@ -26,7 +26,7 @@ LANGUAGE='en_US.UTF-8'
 TIMEZONE='US/Chicago'  # from /usr/share/zoneinfo/
 
 # https://stackoverflow.com/a/28085062
-# Use codes from command:   reflector --list-countries
+# Use country codes from command: reflector --list-countries
 : "${ARCH_MIRROR_COUNTRY:=US}"
 
 LUKS_PASSWORD='user'
@@ -41,19 +41,15 @@ USER_PASSWORD='user'
 # --- do NOT modify ---
 
 CHROOT_MOUNT='/mnt'
-# Bootloader: ${EFI_DIR}/EFI/${BOOTLOADER_DIR}/grubx64.efi
-EFI_DIR='/boot'
+# Bootloader: ${BOOT_MOUNT}/EFI/${BOOTLOADER_DIR}/grubx64.efi
+BOOT_MOUNT='/boot'
 BOOTLOADER_DIR='boot'
-
-ROOT_PASSWORD_CRYPTED="$(openssl passwd -6 $ROOT_PASSWORD)"
-USER_PASSWORD_CRYPTED="$(openssl passwd -6 $USER_PASSWORD)"
 
 LUKS_CONTAINER='luks_container'
 LUKS_PATH="/dev/mapper/${LUKS_CONTAINER}"
 LVM_VG='luks_root'
 LVM_LV_ROOT='root'
 LVM_ROOT_PATH="/dev/${LVM_VG}/${LVM_LV_ROOT}"
-LUKS_LVM_MKINITCPIO_MODULES='MODULES=(ext4)'
 LUKS_LVM_MKINITCPIO_HOOKS='HOOKS=(base udev autodetect keyboard keymap consolefont modconf block encrypt lvm2 filesystems fsck)'
 
 # --- SCRIPT FUNCTIONS ---
@@ -135,11 +131,19 @@ set -u
 # === DISK ===
 
 # Clearing partition table on "${DISK}"
-sgdisk --zap-all "${DISK}"
+sgdisk \
+    --zap-all \
+    "${DISK}"
 
 # Destroying magic strings and signatures on "${DISK}"
-dd if=/dev/zero of="${DISK}" bs=512 count=2048
-wipefs --all "${DISK}"
+dd \
+    if=/dev/zero \
+    of="${DISK}" \
+    bs=512 \
+    count=2048
+wipefs \
+    --all \
+    "${DISK}"
 
 if [[ -e /sys/firmware/efi/efivars ]] ; then
     # (U)EFI
@@ -147,15 +151,29 @@ if [[ -e /sys/firmware/efi/efivars ]] ; then
     echo "[i] Detected (U)EFI... will use GPT."
     GRUB_PKGS="efibootmgr dosfstools mtools"
     GRUB_TARGET="x86_64-efi"
-    GRUB_INSTALL_PARAMS="--removable --bootloader-id=${BOOTLOADER_DIR} --efi-directory=${EFI_DIR}"
+    GRUB_INSTALL_PARAMS="--removable --bootloader-id=${BOOTLOADER_DIR} --efi-directory=${BOOT_MOUNT}"
 
     # Create EFI partition: 550MB size, type EFI (ef00), named, attribute bootable
-    sgdisk --new=1:0:+550M --typecode=1:ef00 --change-name=1:boot --attributes=1:set:2 "${DISK}"
+    sgdisk \
+        --new=1:0:+550M \
+        --typecode=1:ef00 \
+        --change-name=1:${BOOTLOADER_DIR} \
+        --attributes=1:set:2 \
+        "${DISK}"
     # Create root partition: remaining free space, type Linux (8300), named
-    sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:root "${DISK}"
-else
-    # TODO: LVM on LUKS Broken for MBR
+    sgdisk \
+        --new=2:0:0 \
+        --typecode=2:8300 \
+        --change-name=2:${LVM_LV_ROOT} \
+        "${DISK}"
 
+    # Creating /boot filesystem (FAT32)
+    yes | mkfs.fat \
+        -F 32 \
+        -n ${BOOTLOADER_DIR^^} \
+        "${DISK_PART_BOOT}"
+
+else
     # BIOS
     # https://wiki.archlinux.org/title/Partitioning#BIOS/MBR_layout_example
     echo "[i] Detected BIOS... will use MBR."
@@ -166,37 +184,61 @@ else
     
     # Reference: https://www.man7.org/linux/man-pages/man8/sfdisk.8.html
     # "Header lines": set disk as MBR
-    echo 'label: dos' | sfdisk "${DISK}"
+    echo 'label: dos' | sfdisk \
+        --quiet \
+        "${DISK}"
     # "Named-fields format": start & size implied (1MB to end), boot active, 83 Linux type
-    echo -e 'size=2MiB, type=83, name="boot"\ntype=83, name="root"' | sfdisk "${DISK}"
+    echo -e "size=256MiB, type=83, name='${BOOTLOADER_DIR}'\ntype=83, name='${LVM_LV_ROOT}'" | sfdisk \
+        --quiet \
+        "${DISK}"
+    
+    yes | mkfs.ext4 \
+        -L ${BOOTLOADER_DIR} \
+        "${DISK_PART_BOOT}"
 fi
-
-# Creating /boot filesystem (FAT32)
-yes | mkfs.fat -F 32 -n BOOT "${DISK_PART_BOOT}"
 
 # === LVM on LUKS ===
 # Reference: https://wiki.archlinux.org/title/Dm-crypt/Encrypting_an_entire_system#LVM_on_LUKS
 
 # Create LUKS encrypted container
 # NOTE: Grub supports LUKS1 (LUKS2 not well-supported): https://wiki.archlinux.org/title/GRUB#Encrypted_/boot
-echo -n "${LUKS_PASSWORD}" | cryptsetup luksFormat --type luks --force-password "${DISK_PART_ROOT}" -
-echo -n "${LUKS_PASSWORD}" | cryptsetup open "${DISK_PART_ROOT}" "${LUKS_CONTAINER}"
+echo -n "${LUKS_PASSWORD}" | cryptsetup \
+    luksFormat \
+    --type luks \
+    --force-password \
+    "${DISK_PART_ROOT}" -
+echo -n "${LUKS_PASSWORD}" | cryptsetup \
+    open \
+    "${DISK_PART_ROOT}" \
+    "${LUKS_CONTAINER}"
 # Create LVM
-pvcreate "${LUKS_PATH}"  # physical group
-vgcreate "${LVM_VG}" "${LUKS_PATH}"  # volume group
-lvcreate --extents 100%FREE "${LVM_VG}" --name "${LVM_LV_ROOT}"
+pvcreate \
+    "${LUKS_PATH}"  # physical group
+vgcreate \
+    "${LVM_VG}" \
+    "${LUKS_PATH}"  # volume group
+lvcreate \
+    --extents 100%FREE \
+    --name "${LVM_LV_ROOT}" \
+    "${LVM_VG}"
 
 # Creating /root filesystem (ext4)
-yes | mkfs.ext4 -F -m 0 -L "${LVM_LV_ROOT}" "${LVM_ROOT_PATH}"
+yes | mkfs.ext4 \
+    -F \
+    -m 0 \
+    -L "${LVM_LV_ROOT}" \
+    "${LVM_ROOT_PATH}"
 
 # Mounting "${LVM_ROOT_PATH}" to "${CHROOT_MOUNT}"
-mount "${LVM_ROOT_PATH}" "${CHROOT_MOUNT}"
+mount \
+    "${LVM_ROOT_PATH}" \
+    "${CHROOT_MOUNT}"
     
 # Mount boot drive
-# NOTE: it must be mounted in this order for (U)EFI only
-if [[ -e /sys/firmware/efi/efivars ]] ; then
-    mount --mkdir "${DISK_PART_BOOT}" "${CHROOT_MOUNT}${EFI_DIR}"
-fi
+mount \
+    --mkdir \
+    "${DISK_PART_BOOT}" \
+    "${CHROOT_MOUNT}${BOOT_MOUNT}"
 
 # After partitioning, discern LUKS device for GRUB
 LUKS_DEVICE_UUID="$(lsblk --noheadings --nodeps --output UUID ${DISK_PART_ROOT})"
@@ -206,23 +248,55 @@ LUKS_KERNEL_BOOT_PARAM="cryptdevice=UUID=${LUKS_DEVICE_UUID}:${LUKS_CONTAINER} r
 # === SYSTEM CONFIG ===
 
 # Sync time
-timedatectl set-ntp true
+timedatectl \
+    set-ntp true
 
 # Set pkg mirrorlist w/ desired options
 # Reference: https://xyne.dev/projects/reflector/
-reflector --country "${ARCH_MIRROR_COUNTRY}" --ipv4 --latest 10 --completion-percent 100 --protocol https --sort rate --threads 5 --save /etc/pacman.d/mirrorlist
+reflector \
+    --country "${ARCH_MIRROR_COUNTRY}" \
+    --ipv4 \
+    --latest 10 \
+    --completion-percent 100 \
+    --protocol https \
+    --sort rate \
+    --threads 5 \
+    --save /etc/pacman.d/mirrorlist
 
 # pacstrap installation
-sed --in-place 's/.*ParallelDownloads.*/ParallelDownloads = 5/g' /etc/pacman.conf
+sed \
+    --in-place \
+    's/.*ParallelDownloads.*/ParallelDownloads = 5/g' \
+    /etc/pacman.conf
 # Update keyring to avoid corrupted packages; only sometimes needed
 # yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
 # yes | pacman -S --refresh --refresh --noconfirm ca-certificates
-yes | pacstrap "${CHROOT_MOUNT}" base base-devel linux linux-headers linux-firmware intel-ucode archlinux-keyring dhcpcd vim openssh python lvm2 grub os-prober ${GRUB_PKGS}
+yes | pacstrap "${CHROOT_MOUNT}" \
+    base \
+    base-devel \
+    linux \
+    linux-headers \
+    linux-firmware \
+    intel-ucode \
+    archlinux-keyring \
+    dhcpcd \
+    vim \
+    openssh \
+    python \
+    lvm2 \
+    grub \
+    os-prober \
+    ${GRUB_PKGS}
 
-genfstab -U -p "${CHROOT_MOUNT}" > "${CHROOT_MOUNT}"/etc/fstab
+genfstab \
+    -U \
+    -p \
+    "${CHROOT_MOUNT}" \
+    > "${CHROOT_MOUNT}"/etc/fstab
 arch-chroot "${CHROOT_MOUNT}" bash -c "
     # Machine
     echo ${HOSTNAME} > /etc/hostname
+    echo -e '127.0.0.1 localhost\n::1 localhost\n127.0.1.1 ${HOSTNAME} $(echo ${HOSTNAME} | cut --fields=1 --delimiter=. -)' > /etc/hosts
     ln --symbolic --force /usr/share/zoneinfo/${TIMEZONE} /etc/localtime
     hwclock --systohc
     echo KEYMAP=${KEYMAP} > /etc/vconsole.conf
@@ -231,11 +305,12 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
     systemctl enable dhcpcd sshd
 
     # Root User
-    usermod --password ${ROOT_PASSWORD_CRYPTED} root
-    echo '%wheel ALL=(ALL) ALL' | tee --append /etc/sudoers && visudo --check --strict
+    echo 'root:${ROOT_PASSWORD}' | chpasswd --crypt-method SHA512
 
     # Unprivileged User
-    useradd $USER_NAME --create-home --user-group --password $USER_PASSWORD_CRYPTED --groups wheel
+    echo '%wheel ALL=(ALL) ALL' | tee --append /etc/sudoers && visudo --check --strict
+    useradd ${USER_NAME} --create-home --user-group --groups wheel
+    echo '${USER_NAME}:${USER_PASSWORD}' | chpasswd --crypt-method SHA512
 "
 
 # === BOOT ===
@@ -243,16 +318,14 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
 # Install GRUB UEFI
 arch-chroot "${CHROOT_MOUNT}" bash -c "
     # Reconfigure mkinitcpio due to LUKS + LVM
-    #sed --in-place 's/^\s*MODULES.*/${LUKS_LVM_MKINITCPIO_MODULES}/g' /etc/mkinitcpio.conf
     sed --in-place 's/^\s*HOOKS.*/${LUKS_LVM_MKINITCPIO_HOOKS}/g' /etc/mkinitcpio.conf
     mkinitcpio --allpresets
 
     # Add kernel boot params for LUKS
     sed --in-place 's#.*GRUB_CMDLINE_LINUX_DEFAULT.*#GRUB_CMDLINE_LINUX_DEFAULT=\"${LUKS_KERNEL_BOOT_PARAM}\"#g' /etc/default/grub
     # Install GRUB bootloader
-    # --modules='lvm part_gpt part_msdos' 
-    grub-install --recheck --target=${GRUB_TARGET} ${GRUB_INSTALL_PARAMS} ${DISK}
-    grub-mkconfig --output /boot/grub/grub.cfg
+    grub-install --recheck --modules='lvm part_gpt part_msdos' --target=${GRUB_TARGET} ${GRUB_INSTALL_PARAMS} ${DISK}
+    grub-mkconfig --output ${BOOT_MOUNT}/grub/grub.cfg
 "
 
 # === CLEANUP ===
