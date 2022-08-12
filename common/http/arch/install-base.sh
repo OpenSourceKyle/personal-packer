@@ -176,7 +176,6 @@ else
     GRUB_PKGS=""
     GRUB_TARGET="i386-pc"
     GRUB_INSTALL_PARAMS=""
-    #DISK_PART_ROOT="$DISK_PART_BOOT"  # only 1 partition needed for BIOS & MBR
     
     # Reference: https://www.man7.org/linux/man-pages/man8/sfdisk.8.html
     # "Header lines": set disk as MBR
