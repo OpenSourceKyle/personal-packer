@@ -3,7 +3,6 @@
 # Reference: https://www.tecmint.com/arch-linux-installation-and-configuration-guide/
 # Reference: https://github.com/badele/archlinux-auto-install/blob/main/install/install.sh
 
-set -x
 set -e
 
 # === VARIABLES ===
@@ -27,7 +26,7 @@ LANGUAGE='en_US.UTF-8'
 TIMEZONE='US/Chicago'  # from /usr/share/zoneinfo/
 
 # https://stackoverflow.com/a/28085062
-# reflector --list-countries
+# Use codes from command:   reflector --list-countries
 : "${ARCH_MIRROR_COUNTRY:=US}"
 
 LUKS_PASSWORD='user'
@@ -46,11 +45,10 @@ CHROOT_MOUNT='/mnt'
 EFI_DIR='/boot'
 BOOTLOADER_DIR='boot'
 
-# TODO: Warning: truncating password to 8 characters
-ROOT_PASSWORD_CRYPTED=$(openssl passwd -crypt "$ROOT_PASSWORD")
-USER_PASSWORD_CRYPTED=$(openssl passwd -crypt "$USER_PASSWORD")
+ROOT_PASSWORD_CRYPTED="$(openssl passwd -6 $ROOT_PASSWORD)"
+USER_PASSWORD_CRYPTED="$(openssl passwd -6 $USER_PASSWORD)"
 
-LUKS_CONTAINER='cryptlvm'
+LUKS_CONTAINER='luks_container'
 LUKS_PATH="/dev/mapper/${LUKS_CONTAINER}"
 LVM_VG='luks_root'
 LVM_LV_ROOT='root'
@@ -80,7 +78,7 @@ yes_or_no () {
 
 # === PRECHECKS ===
 
-# --- SCRIPT ARGS ---
+# --- Script Args ---
 
 if [[ -z "${1+null}" ]] ; then
     echo "[E] This script requires commandline arguments!"
@@ -88,10 +86,6 @@ if [[ -z "${1+null}" ]] ; then
 else
     echo "[+] CLI ARGS set: ${1}"
 fi
-
-# Prompt user before destructive actions take place when
-# this option is unset (aka provide option to skip prompts)
-INTERACTIVE=1
 
 # Parse script's commandline args
 # https://mywiki.wooledge.org/BashFAQ/035
@@ -109,10 +103,11 @@ while :; do
     shift
 done
 
-# Safe prompting
+# --- Interactive Mode :: Safe Prompts ---
+
 if [[ "$INTERACTIVE" -eq 1 ]] ; then
     echo '[i] INTERACTIVE MODE... will prompt for destructive values!'
-    echo 'NOTE: Values are not validated... that is YOUR job!'
+    echo '!!! NOTE: Values are not validated... that is YOUR job !!!'
 
     echo
     echo 'For the following disk-related questions, provide FULL-PATH for each'
@@ -152,33 +147,34 @@ if [[ -e /sys/firmware/efi/efivars ]] ; then
     echo "[i] Detected (U)EFI... will use GPT."
     GRUB_PKGS="efibootmgr dosfstools mtools"
     GRUB_TARGET="x86_64-efi"
-    GRUB_INSTALL_PARAMS="--bootloader-id=${BOOTLOADER_DIR} --efi-directory=${EFI_DIR}"
+    GRUB_INSTALL_PARAMS="--removable --bootloader-id=${BOOTLOADER_DIR} --efi-directory=${EFI_DIR}"
 
     # Create EFI partition: 550MB size, type EFI (ef00), named, attribute bootable
     sgdisk --new=1:0:+550M --typecode=1:ef00 --change-name=1:boot --attributes=1:set:2 "${DISK}"
     # Create root partition: remaining free space, type Linux (8300), named
     sgdisk --new=2:0:0 --typecode=2:8300 --change-name=2:root "${DISK}"
-    
-    # Creating /boot filesystem (FAT32)
-    yes | mkfs.fat -F 32 -n BOOT "${DISK_PART_BOOT}"
-
 else
+    # TODO: LVM on LUKS Broken for MBR
+
     # BIOS
     # https://wiki.archlinux.org/title/Partitioning#BIOS/MBR_layout_example
     echo "[i] Detected BIOS... will use MBR."
     GRUB_PKGS=""
     GRUB_TARGET="i386-pc"
     GRUB_INSTALL_PARAMS=""
-    DISK_PART_ROOT="$DISK_PART_BOOT"  # only 1 partition needed for BIOS & MBR
+    #DISK_PART_ROOT="$DISK_PART_BOOT"  # only 1 partition needed for BIOS & MBR
     
     # Reference: https://www.man7.org/linux/man-pages/man8/sfdisk.8.html
     # "Header lines": set disk as MBR
     echo 'label: dos' | sfdisk "${DISK}"
     # "Named-fields format": start & size implied (1MB to end), boot active, 83 Linux type
-    echo 'bootable, type=83' | sfdisk "${DISK}"
+    echo -e 'size=2MiB, type=83, name="boot"\ntype=83, name="root"' | sfdisk "${DISK}"
 fi
 
-# LVM on LUKS
+# Creating /boot filesystem (FAT32)
+yes | mkfs.fat -F 32 -n BOOT "${DISK_PART_BOOT}"
+
+# === LVM on LUKS ===
 # Reference: https://wiki.archlinux.org/title/Dm-crypt/Encrypting_an_entire_system#LVM_on_LUKS
 
 # Create LUKS encrypted container
@@ -247,14 +243,15 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
 # Install GRUB UEFI
 arch-chroot "${CHROOT_MOUNT}" bash -c "
     # Reconfigure mkinitcpio due to LUKS + LVM
-    sed --in-place 's/^\s*MODULES.*/${LUKS_LVM_MKINITCPIO_MODULES}/g' /etc/mkinitcpio.conf
+    #sed --in-place 's/^\s*MODULES.*/${LUKS_LVM_MKINITCPIO_MODULES}/g' /etc/mkinitcpio.conf
     sed --in-place 's/^\s*HOOKS.*/${LUKS_LVM_MKINITCPIO_HOOKS}/g' /etc/mkinitcpio.conf
     mkinitcpio --allpresets
 
     # Add kernel boot params for LUKS
     sed --in-place 's#.*GRUB_CMDLINE_LINUX_DEFAULT.*#GRUB_CMDLINE_LINUX_DEFAULT=\"${LUKS_KERNEL_BOOT_PARAM}\"#g' /etc/default/grub
     # Install GRUB bootloader
-    grub-install --removable --recheck --modules='lvm part_gpt part_msdos' --target=${GRUB_TARGET} ${GRUB_INSTALL_PARAMS} ${DISK}
+    # --modules='lvm part_gpt part_msdos' 
+    grub-install --recheck --target=${GRUB_TARGET} ${GRUB_INSTALL_PARAMS} ${DISK}
     grub-mkconfig --output /boot/grub/grub.cfg
 "
 

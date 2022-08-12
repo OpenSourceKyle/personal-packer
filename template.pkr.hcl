@@ -42,10 +42,10 @@ source "virtualbox-iso" "baseline" {
 
   iso_target_path = "iso_file"
 
-  firmware        = "efi"
+  firmware        = var.virtualbox_firmware
   keep_registered = true
   vboxmanage_post = [
-    ["snapshot", "{{.Name}}", "take", "CLEAN BUILD", "--description=Clean build via Packer"],
+    ["snapshot", "{{.Name}}", "take", "CLEAN_BUILD", "--description=Clean build via Packer"],
   ]
 }
 
