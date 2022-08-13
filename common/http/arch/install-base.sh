@@ -97,7 +97,7 @@ else
     echo "[+] CLI ARGS set: ${1}"
 fi
 
-# Safety to prevent desctruction when outside of liveboot
+# Safety to prevent destruction when outside of liveboot
 if [[ ! "$(uname --nodename)" == "archiso" ]] ; then
     echo
     echo '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
