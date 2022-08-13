@@ -1,43 +1,43 @@
 #!/usr/bin/env bash
 #
+# Automated script to install Arch Linux when ran inside of the proper liveboot
+#
 # Adapted from: https://github.com/elasticdog/packer-arch/blob/master/scripts/install-base.sh
+# Reference: https://wiki.archlinux.org/title/Installation_guide
 
 set -e
 
 # === VARIABLES ===
 
+# --- EXPORTABLE Vars ---
+# NOTE: set via 'export VAR VALUE' before running script
+# If var undefined, assign default: https://stackoverflow.com/a/28085062
+
+: "${HOSTNAME:=arch.localhost}"
+: "${KEYMAP:=us}"
+: "${LANGUAGE:=en_US.UTF-8}"
+: "${TIMEZONE:=US/Chicago}"  # from /usr/share/zoneinfo/
+: "${ARCH_MIRROR_COUNTRY:=US}"  # reflector --list-countries
+: "${LUKS_PASSWORD:=user}"
+: "${ROOT_PASSWORD:=root}"
+: "${USER_NAME:=user}"
+: "${USER_PASSWORD:=user}"
+
 # Discern main disk drive to provision (QEMU & VBox compatible)
 # NOTE: This will automatically prefer SSDs (nvme) over normal harddisks (sda)
-DISK=$(lsblk --paths --output NAME,TYPE --sort NAME | grep disk | awk '{print $1}' | grep --extended-regexp '.da|nvme' | sort --reverse | tail -n1)
-# nvmeXnXpX format
+DISK_HELPER=$(lsblk --paths --output NAME,TYPE --sort NAME | grep disk | awk '{print $1}' | grep --extended-regexp '.da|nvme' | sort --reverse | tail -n1)
+: "${DISK:=$DISK_HELPER}"
 if [[ "${DISK}" = *nvme* ]] ; then
-    DISK_PART_BOOT="${DISK}p1"
-    DISK_PART_ROOT="${DISK}p2"
-# sdX format
+    # nvmeXnXpX format
+    : "${DISK_PART_BOOT:=${DISK}p1}"
+    : "${DISK_PART_ROOT:=${DISK}p2}"
 else
-    DISK_PART_BOOT="${DISK}1"
-    DISK_PART_ROOT="${DISK}2"
+    # sdX format
+    : "${DISK_PART_BOOT:=${DISK}1}"
+    : "${DISK_PART_ROOT:=${DISK}2}"
 fi
 
-HOSTNAME='arch.localhost'
-KEYMAP='us'
-LANGUAGE='en_US.UTF-8'
-TIMEZONE='US/Chicago'  # from /usr/share/zoneinfo/
-
-# https://stackoverflow.com/a/28085062
-# Use country codes from command: reflector --list-countries
-: "${ARCH_MIRROR_COUNTRY:=US}"
-
-LUKS_PASSWORD='user'
-
-# Reference: https://unix.stackexchange.com/a/361789
-# ROOT_PASSWORD="$(< /dev/urandom tr -cd '[:print:]' | head -c 20)" # generates random password
-ROOT_PASSWORD='root'
-
-USER_NAME='user'
-USER_PASSWORD='user'
-
-# --- do NOT modify ---
+# !!! do NOT modify below vars !!!
 
 CHROOT_MOUNT='/mnt'
 # Bootloader: ${BOOT_MOUNT}/EFI/${BOOTLOADER_DIR}/grubx64.efi
@@ -52,6 +52,21 @@ LVM_ROOT_PATH="/dev/${LVM_VG}/${LVM_LV_ROOT}"
 LUKS_LVM_MKINITCPIO_HOOKS='HOOKS=(base udev autodetect keyboard keymap consolefont modconf block encrypt lvm2 filesystems fsck)'
 
 # --- SCRIPT FUNCTIONS ---
+
+show_help () {
+    echo
+    echo "USAGE: $0 -i,--interactive|-n,--noninteractive [options]"
+    echo
+    echo 'NOTE: options MUST be separated by whitespace:'
+    echo "          $0 -i -u"
+    echo
+    echo '-i, --interactive              : prompt user for values (e.g. disk to pacstrap)'
+    echo '                                 (if set, -n|--noninteractive will be ignored)'
+    echo '-n, --noninteractive           : smartly discern values (e.g. guess disk to pacstrap)'
+    echo '-u, --update-archlinux-keyring : update archlinux-keyring package before pacstrap'
+    echo '                                 (only use when pacstrap gives keyring or package issues)'
+    echo
+}
 
 # Yes/No Confirmation Prompt
 # https://stackoverflow.com/a/29436423
@@ -73,33 +88,32 @@ yes_or_no () {
 
 # === PRECHECKS ===
 
-# --- Script Args ---
-
-if [[ -z "${1+null}" ]] ; then
-    echo "[E] This script requires commandline arguments!"
+# CLI args required
+if [[ -z "${1}" ]] ; then
+    echo '[E] This script requires commandline arguments!'
+    show_help
     exit 2
 else
     echo "[+] CLI ARGS set: ${1}"
 fi
 
+# Safety to prevent desctruction when outside of liveboot
+if [[ ! "$(uname --nodename)" == "archiso" ]] ; then
+    echo
+    echo '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
+    echo '[E] This script must only be ran in an Arch Linux liveboot!'
+    echo '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
+    echo
+    show_help
+    exit 3
+fi
+
 # Parse script's commandline args
 # https://mywiki.wooledge.org/BashFAQ/035
-while :; do
+while : ; do
     case $1 in
         -h|--help)
-            echo
-            echo "USAGE: $0 [options]"
-            echo
-            echo 'NOTE: options MUST be separated by whitespace and cannot be'
-            echo '      combined like so:'
-            echo "          $0 -i -u"
-            echo
-            echo '-i|--interactive              : prompt user for values (e.g. disk to pacstrap)'
-            echo '                                (if set, -n|--noninteractive will be ignored)'
-            echo '-n|--noninteractive           : smartly discern values (e.g. guess disk to pacstrap)'
-            echo '-u|--update-archlinux-keyring : update archlinux-keyring package before pacstrap'
-            echo '                                (only use when pacstrap gives keyring or package issues)'
-            echo
+            show_help
             exit 0
             ;;
         -i|--interactive)
@@ -112,9 +126,8 @@ while :; do
             fi
             ;;
         -u|--update-archlinux-keyring)
-            # Update keyring to avoid corrupted packages; only sometimes needed
+            # Update keyring to avoid corrupted packages ; only sometimes needed
             yes | pacman -S --refresh --refresh --noconfirm archlinux-keyring
-            #yes | pacman -S --refresh --refresh --noconfirm ca-certificates
             ;;
         *)
             break
