@@ -94,7 +94,7 @@ if [[ -z "${1}" ]] ; then
     show_help
     exit 2
 else
-    echo "[+] CLI ARGS set: ${1}"
+    echo "[+] CLI ARGS set: ${*}"
 fi
 
 # Safety to prevent destruction when outside of liveboot
