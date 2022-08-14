@@ -13,10 +13,10 @@ set -e
 # NOTE: set via 'export VAR VALUE' before running script
 # If var undefined, assign default: https://stackoverflow.com/a/28085062
 
-: "${HOSTNAME:=arch.localhost}"
-: "${KEYMAP:=us}"
-: "${LANGUAGE:=en_US.UTF-8}"
-: "${TIMEZONE:=US/Chicago}"  # from /usr/share/zoneinfo/
+: "${SET_HOSTNAME:=arch.localhost}"
+: "${SET_KEYMAP:=us}"
+: "${SET_LANGUAGE:=en_US.UTF-8}"
+: "${SET_TIMEZONE:=US/Chicago}"  # from /usr/share/zoneinfo/
 : "${ARCH_MIRROR_COUNTRY:=US}"  # reflector --list-countries
 : "${LUKS_PASSWORD:=user}"
 : "${ROOT_PASSWORD:=root}"
@@ -298,7 +298,7 @@ reflector \
 # pacstrap installation
 sed \
     --in-place \
-    's/.*ParallelDownloads.*/ParallelDownloads = 5/g' \
+    's/.*ParallelDownloads.*/ParallelDownloads = 10/g' \
     /etc/pacman.conf
 yes | pacstrap "${CHROOT_MOUNT}" \
     base \
@@ -324,12 +324,12 @@ genfstab \
     > "${CHROOT_MOUNT}"/etc/fstab
 arch-chroot "${CHROOT_MOUNT}" bash -c "
     # Machine
-    echo ${HOSTNAME} > /etc/hostname
-    echo -e '127.0.0.1 localhost\n::1 localhost\n127.0.1.1 ${HOSTNAME} $(echo ${HOSTNAME} | cut --fields=1 --delimiter=. -)' > /etc/hosts
-    ln --symbolic --force /usr/share/zoneinfo/${TIMEZONE} /etc/localtime
+    echo ${SET_HOSTNAME} > /etc/hostname
+    echo -e '127.0.0.1 localhost\n::1 localhost\n127.0.1.1 ${SET_HOSTNAME} $(echo ${SET_HOSTNAME} | cut --fields=1 --delimiter=. -)' > /etc/hosts
+    ln --symbolic --force /usr/share/zoneinfo/${SET_TIMEZONE} /etc/localtime
     hwclock --systohc
-    echo KEYMAP=${KEYMAP} > /etc/vconsole.conf
-    sed --in-place s/#${LANGUAGE}/${LANGUAGE}/ /etc/locale.gen
+    echo SET_KEYMAP=${SET_KEYMAP} > /etc/vconsole.conf
+    sed --in-place s/#${SET_LANGUAGE}/${SET_LANGUAGE}/ /etc/locale.gen
     locale-gen
     systemctl enable dhcpcd sshd
 
