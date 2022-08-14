@@ -45,6 +45,9 @@ source "virtualbox-iso" "baseline" {
   firmware        = var.virtualbox_firmware
   keep_registered = true
   vboxmanage_post = [
+    # Set to Bridged adapter on completion
+    ["modifyvm", "{{.Name}}", "--nic1", "bridged", "--bridgeadapter1", "enp3s0"],
+    # Snapshot VM
     ["snapshot", "{{.Name}}", "take", "CLEAN_BUILD", "--description=Clean build via Packer"],
   ]
 }
