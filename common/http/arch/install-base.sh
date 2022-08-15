@@ -309,6 +309,7 @@ yes | pacstrap "${CHROOT_MOUNT}" \
     intel-ucode \
     archlinux-keyring \
     dhcpcd \
+    iwctl \
     vim \
     openssh \
     python \
