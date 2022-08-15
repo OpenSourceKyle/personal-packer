@@ -308,7 +308,7 @@ yes | pacstrap "${CHROOT_MOUNT}" \
     linux-firmware \
     intel-ucode \
     archlinux-keyring \
-    dhcpcd \
+    networkmanager \
     iwd \
     vim \
     openssh \
@@ -332,7 +332,7 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
     echo SET_KEYMAP=${SET_KEYMAP} > /etc/vconsole.conf
     sed --in-place s/#${SET_LANGUAGE}/${SET_LANGUAGE}/ /etc/locale.gen
     locale-gen
-    systemctl enable dhcpcd sshd
+    systemctl enable NetworkManager sshd
 
     # Root User
     echo 'root:${ROOT_PASSWORD}' | chpasswd --crypt-method SHA512
