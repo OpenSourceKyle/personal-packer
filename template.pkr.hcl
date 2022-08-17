@@ -42,6 +42,10 @@ source "virtualbox-iso" "baseline" {
 
   iso_target_path = "iso_file"
 
+  # https://wiki.archlinux.org/title/VirtualBox/Install_Arch_Linux_as_a_guest#Fullscreen_mode_shows_blank_screen
+  gfx_controller = "vmsvga"
+  gfx_vram_size  = "64"
+
   firmware        = var.virtualbox_firmware
   keep_registered = true
   vboxmanage_post = [
