@@ -10,9 +10,8 @@ set -u
 : "${TEMP_SSH_USER:=user}"
 : "${TEMP_SSH_PASSWORD:=user}"
 
-# ---
+# --- Create temp user ---
 
-# Create temp user
 useradd \
     --comment "$TEMP_SSH_USER" \
     --create-home \
@@ -24,12 +23,15 @@ echo "${TEMP_SSH_USER}:${TEMP_SSH_PASSWORD}" | chpasswd \
 
 echo -e 'Defaults env_keep += "SSH_AUTH_SOCK"\nuser ALL=(ALL) NOPASSWD: ALL' \
     > /etc/sudoers.d/10_user
+
 chmod \
     0440 \
     /etc/sudoers.d/10_user
+
 visudo \
     --check \
     --strict
+
 systemctl start sshd.service
 
 echo "SSH temporarily enabled for Packer provisioning with creds: $TEMP_SSH_USER // $TEMP_SSH_PASSWORD"

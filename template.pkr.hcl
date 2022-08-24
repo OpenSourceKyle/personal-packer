@@ -49,8 +49,11 @@ source "virtualbox-iso" "baseline" {
   firmware        = var.virtualbox_firmware
   keep_registered = true
   vboxmanage_post = [
-    # Set to Bridged adapter on completion
-    ["modifyvm", "{{.Name}}", "--nic1", "bridged", "--bridgeadapter1", "enp3s0"],
+    # Add bridged adapters for default Ethernet and WiFi (in addition to existing NAT)
+    ["modifyvm", "{{.Name}}", "--nic2", "bridged", "--bridgeadapter2", "enp3s0"],
+    ["modifyvm", "{{.Name}}", "--nic3", "bridged", "--bridgeadapter3", "wlp2s0"],
+    # Disable Remote Display
+    ["modifyvm", "{{.Name}}", "--vrde", "off"],
     # Snapshot VM
     ["snapshot", "{{.Name}}", "take", "CLEAN_BUILD", "--description=Clean build via Packer"],
   ]
@@ -67,9 +70,8 @@ build {
     output_directory = "YOUR_BUILT_VM-arch-qemu"
     boot_command     = var.boot_command_arch
     boot_wait        = var.boot_wait_arch
-    # NOTE: ISO must be downloaded to $CWD or the ISO will be downloaded
-    iso_url      = var.iso_arch
-    iso_checksum = var.iso_arch_hash
+    iso_url          = var.iso_arch
+    iso_checksum     = var.iso_arch_hash
   }
 
   # Arch - Virtualbox
@@ -80,9 +82,8 @@ build {
     output_directory = "YOUR_BUILT_VM-arch-virtualbox"
     boot_command     = var.boot_command_arch
     boot_wait        = var.boot_wait_arch
-    # NOTE: ISO must be downloaded to $CWD or the ISO will be downloaded
-    iso_url      = var.iso_arch
-    iso_checksum = var.iso_arch_hash
+    iso_url          = var.iso_arch
+    iso_checksum     = var.iso_arch_hash
   }
 
   # Kali - QEMU (KVM) 
@@ -92,9 +93,8 @@ build {
     output_directory = "YOUR_BUILT_VM-kali-qemu"
     boot_command     = var.boot_command_debian_kali
     boot_wait        = var.boot_wait_debian_kali
-    # NOTE: ISO must be downloaded to $CWD or the ISO will be downloaded
-    iso_url      = var.iso_kali
-    iso_checksum = var.iso_kali_hash
+    iso_url          = var.iso_kali
+    iso_checksum     = var.iso_kali_hash
   }
 
   # Kali - Virtualbox
@@ -105,9 +105,8 @@ build {
     output_directory = "YOUR_BUILT_VM-kali-virtualbox"
     boot_command     = var.boot_command_debian_kali
     boot_wait        = var.boot_wait_debian_kali
-    # NOTE: ISO must be downloaded to $CWD or the ISO will be downloaded
-    iso_url      = var.iso_kali
-    iso_checksum = var.iso_kali_hash
+    iso_url          = var.iso_kali
+    iso_checksum     = var.iso_kali_hash
   }
 
   # --- Provision post-building ---
@@ -128,7 +127,7 @@ build {
   provisioner "shell" {
     # only            = ["*.arch"]
     only            = ["virtualbox-iso.arch"]
-    execute_command = "sudo --preserve-env bash -c '{{ .Path }} --noninteractive'"
+    execute_command = "sudo --preserve-env bash -c '{{ .Path }} --noninteractive #--update-archlinux-keyring'"
     script          = "common/http/arch/install-base.sh"
   }
   # Perform full system update/upgrade

@@ -50,8 +50,9 @@ variable "full_system_upgrade_command_debian_kali" {
 variable "boot_command_arch" {
   type = list(string)
   default = [
-    "<enter><wait40>",
-    "curl --silent http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh | bash <enter><wait5>"
+    "<enter><wait60>",
+    "curl --silent http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh | bash -x",
+    "<enter><wait5>"
   ]
 }
 variable "boot_wait_arch" {
@@ -76,11 +77,11 @@ variable "http_directory" {
 
 variable "preeed_server_port_min" {
   type    = number
-  default = 8000
+  default = 8500
 }
 variable "preeed_server_port_max" {
   type    = number
-  default = 8010
+  default = 8505
 }
 
 variable "cpus" {
