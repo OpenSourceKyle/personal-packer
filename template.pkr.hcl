@@ -1,4 +1,4 @@
-# --- Baseline configurations ---
+# --- Baseline Configurations ---
 
 # https://www.packer.io/plugins/builders/qemu
 source "qemu" "baseline" {
@@ -109,7 +109,7 @@ build {
     iso_checksum     = var.iso_kali_hash
   }
 
-  # --- Provision post-building ---
+  # --- Post-Building Provisioning ---
 
   # Create ~/.ssh directory
   provisioner "shell" {
