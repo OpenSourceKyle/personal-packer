@@ -10,54 +10,23 @@ Locally build Virtual Machines from-scratch using 1-command.
 
 # Usage
 
+## Quickstart
+
+Use the included `build.sh` script to handle Packer. More advanced commands will need to be ran manually.
+
+```shell
+./build.sh --help
+```
+
 ## Build
+
+NOTE: This is not recommended since multiple virtualization platforms are supported in this template, which conflict (e.g. QEMU & VirtualBox).
+
 ```shell
 # Build all templates
-# NOTE: not recommended since multiple virtualization platforms are
-# supported in this template, which conflict (e.g. QEMU & Virtualbox)
+
 packer build .
-
-# --- QEMU ---
-
-# Arch
-packer build -only 'qemu.arch' .
-
-# Kali
-packer build -only 'qemu.kali' .
-
-# --- Virtualbox ---
-
-# Arch
-packer build -only 'virtualbox-iso.arch' .
-
-# Kali
-packer build -only 'virtualbox-iso.kali' .
-
-# Kali Latest Image (ascertain version via curl)
-packer build \
-    -only 'virtualbox-iso.kali' \
-    -var="iso_kali=https://cdimage.kali.org/current/$(curl -so- https://cdimage.kali.org/current/ | grep -oP 'kali-linux-.*?-installer.amd64.iso' | uniq)" \
-    .
 ```
-
-## Debug
-```shell
-# Shows very verbose output, GUI while installing, and prompts user on errors
-PACKER_LOG=1 packer build \
-    -var="dont_display_gui=false" \
-    -on-error=ask \
-    .
-
-# Overwrite pre-set variable via CLI arg in key=value format:
-### ACTION: Do NOT perform full system upgrade after installation (to minimize build time)
-### NOTE: this works by overwriting the system update command to a 'nop' command 
-### NOTE: this cannot be an empty string or the build will fail (at the very end!)
-### NOTE: the arg must be in variables.pkr.hcl
-packer build \
-    -var="full_system_upgrade_command_debian_kali=echo do not update" \
-    .
-```
-
 ---
 
 ## Sample Build Times
