@@ -15,7 +15,6 @@ source "qemu" "baseline" {
   ssh_timeout            = var.ssh_timeout
   ssh_handshake_attempts = var.ssh_attempts
 
-  shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
   shutdown_timeout = var.shutdown_timeout
 
   iso_target_path = "iso_file"
@@ -37,7 +36,6 @@ source "virtualbox-iso" "baseline" {
   ssh_timeout            = var.ssh_timeout
   ssh_handshake_attempts = var.ssh_attempts
 
-  shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
   shutdown_timeout = var.shutdown_timeout
 
   iso_target_path = "iso_file"
@@ -70,11 +68,12 @@ build {
     output_directory = "YOUR_BUILT_VM-arch-qemu"
     boot_command     = var.boot_command_arch
     boot_wait        = var.boot_wait_arch
+    shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
     iso_url          = var.iso_arch
     iso_checksum     = var.iso_arch_hash
   }
 
-  # Arch - Virtualbox
+  # Arch - VirtualBox
   source "virtualbox-iso.baseline" {
     name             = "arch"
     guest_os_type    = "ArchLinux_64"
@@ -82,6 +81,7 @@ build {
     output_directory = "YOUR_BUILT_VM-arch-virtualbox"
     boot_command     = var.boot_command_arch
     boot_wait        = var.boot_wait_arch
+    shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
     iso_url          = var.iso_arch
     iso_checksum     = var.iso_arch_hash
   }
@@ -93,11 +93,12 @@ build {
     output_directory = "YOUR_BUILT_VM-kali-qemu"
     boot_command     = var.boot_command_debian_kali
     boot_wait        = var.boot_wait_debian_kali
+    shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
     iso_url          = var.iso_kali
     iso_checksum     = var.iso_kali_hash
   }
 
-  # Kali - Virtualbox
+  # Kali - VirtualBox
   source "virtualbox-iso.baseline" {
     name             = "kali"
     guest_os_type    = "Debian_64"
@@ -105,9 +106,35 @@ build {
     output_directory = "YOUR_BUILT_VM-kali-virtualbox"
     boot_command     = var.boot_command_debian_kali
     boot_wait        = var.boot_wait_debian_kali
+    shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
     iso_url          = var.iso_kali
     iso_checksum     = var.iso_kali_hash
   }
+
+#  # Win_10 - VirtualBox
+#  source "virtualbox-iso.baseline" {
+#    name             = "win_10"
+#    guest_os_type    = "Windows10_64"
+#    output_directory = "YOUR_BUILT_VM-win_10-virtualbox"
+#    floppy_files = [
+#      "${var.autounattend_win_10}",
+#      "./common/scripts/fixnetwork.ps1",
+#      "./common/scripts/microsoft-updates.bat",
+#      "./common/scripts/win-updates.ps1",
+#      "./common/scripts/openssh.ps1"
+#    ]
+#    ssh_wait_timeout = "2h"
+#    iso_checksum     = "${var.iso_win_10_checksum}"
+#    iso_url          = "${var.iso_win_10}"
+#    boot_command     = var.boot_command_win_10
+#    boot_wait        = var.boot_wait_win_10
+#    shutdown_command = "shutdown /s /t 10 /f /d p:4:1 /c \"Packer Shutdown\""
+#    vboxmanage = [
+#      ["modifyvm", "{{ .Name }}", "--boot1", "dvd", "--boot2", "disk"],
+#      #["modifyvm", "{{ .Name }}", "--memory", "${var.memory}"],
+#      #["modifyvm", "{{ .Name }}", "--cpus", "${var.cpus}"],
+#    ]
+#  }
 
   # --- Post-Building Provisioning ---
 
@@ -142,4 +169,17 @@ build {
     only   = ["*.kali"]
     inline = [var.full_system_upgrade_command_debian_kali]
   }
+#  provisioner "shell" {
+#    only            = ["virtualbox-iso.win_10"]
+#    execute_command = "{{ .Vars }} cmd /c C:/Windows/Temp/script.bat"
+#    remote_path     = "/tmp/script.bat"
+#    scripts = [
+#      "./common/scripts/vm-guest-tools.bat",
+#      "./common/scripts/vagrant-ssh.bat",
+#      "./common/scripts/disable-auto-logon.bat",
+#      "./common/scripts/enable-rdp.bat",
+#      "./common/scripts/compile-dotnet-assemblies.bat",
+#      "./common/scripts/compact.bat"
+#    ]
+#  }
 }

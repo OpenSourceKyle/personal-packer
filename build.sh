@@ -10,7 +10,7 @@ KALI_LATEST="-var=iso_kali=https://cdimage.kali.org/current/$(curl --silent http
 
 # $PACKER_BUILD_ARGS is exportable, so this prevents it from being overwritten
 # when its value is already set
-: "${PACKER_BUILD_ARGS=:}"
+: "${PACKER_BUILD_ARGS:=}"
 
 # ---
 
@@ -77,6 +77,7 @@ else
             # OPTIONS
             -v|--verbose)
                 export PACKER_LOG=1
+                #set -x
                 ;;
             -f|--force)
                 PACKER_BUILD_ARGS+=" -force"
@@ -93,10 +94,13 @@ else
 
             # BUILD_NAMEs
             vbox-kali)
+                echo "[i] Currently only BIOS mode is supported!"
+                PACKER_BUILD_ARGS+=" -var=virtualbox_firmware=bios"
                 packer_build virtualbox-iso.kali
                 break
                 ;;
             qemu-kali)
+                printf "\n!!! CURRENTLY UNTESTED !!!\n"
                 packer_build qemu.kali
                 break
                 ;;
@@ -105,6 +109,7 @@ else
                 break
                 ;;
             qemu-arch)
+                printf "\n!!! CURRENTLY UNTESTED !!!\n"
                 packer_build qemu.arch
                 break
                 ;;
