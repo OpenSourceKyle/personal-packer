@@ -65,7 +65,7 @@ build {
   source "qemu.baseline" {
     name             = "arch"
     vm_name          = "packer_arch.img"
-    output_directory = "YOUR_BUILT_VM-arch-qemu"
+    output_directory = "${var.output_location}arch-qemu"
     boot_command     = var.boot_command_arch
     boot_wait        = var.boot_wait_arch
     shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
@@ -78,7 +78,7 @@ build {
     name             = "arch"
     guest_os_type    = "ArchLinux_64"
     vm_name          = "packer_arch.img"
-    output_directory = "YOUR_BUILT_VM-arch-virtualbox"
+    output_directory = "${var.output_location}arch-virtualbox"
     boot_command     = var.boot_command_arch
     boot_wait        = var.boot_wait_arch
     shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
@@ -90,7 +90,7 @@ build {
   source "qemu.baseline" {
     name             = "kali"
     vm_name          = "packer_kali.img"
-    output_directory = "YOUR_BUILT_VM-kali-qemu"
+    output_directory = "${var.output_location}kali-qemu"
     boot_command     = var.boot_command_debian_kali
     boot_wait        = var.boot_wait_debian_kali
     shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
@@ -103,7 +103,7 @@ build {
     name             = "kali"
     guest_os_type    = "Debian_64"
     vm_name          = "packer_kali.img"
-    output_directory = "YOUR_BUILT_VM-kali-virtualbox"
+    output_directory = "${var.output_location}kali-virtualbox"
     boot_command     = var.boot_command_debian_kali
     boot_wait        = var.boot_wait_debian_kali
     shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
@@ -115,7 +115,7 @@ build {
 #  source "virtualbox-iso.baseline" {
 #    name             = "win_10"
 #    guest_os_type    = "Windows10_64"
-#    output_directory = "YOUR_BUILT_VM-win_10-virtualbox"
+#    output_directory = "${var.output_location}win_10-virtualbox"
 #    floppy_files = [
 #      "${var.autounattend_win_10}",
 #      "./common/scripts/fixnetwork.ps1",

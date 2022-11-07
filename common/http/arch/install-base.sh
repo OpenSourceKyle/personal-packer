@@ -9,6 +9,11 @@ set -e
 
 # === VARIABLES ===
 
+# Save current set vars to show only script-set vars later
+# https://unix.stackexchange.com/a/504586
+BEFORE_VARIABLES="/tmp/before_set_variables.txt"
+declare -p > "$BEFORE_VARIABLES"
+
 # --- EXPORTABLE Vars ---
 # NOTE: set via 'export VAR VALUE' before running script
 # If var undefined, assign default: https://stackoverflow.com/a/28085062
@@ -16,7 +21,7 @@ set -e
 : "${SET_HOSTNAME:=arch.localhost}"
 : "${SET_KEYMAP:=us}"
 : "${SET_LANGUAGE:=en_US.UTF-8}"
-: "${SET_TIMEZONE:=US/Chicago}"  # from /usr/share/zoneinfo/
+: "${SET_TIMEZONE:=US/Central}"  # from /usr/share/zoneinfo/
 : "${ARCH_MIRROR_COUNTRY:=US}"  # reflector --list-countries
 : "${LUKS_PASSWORD:=user}"
 : "${ROOT_PASSWORD:=root}"
@@ -37,7 +42,7 @@ else
     : "${DISK_PART_ROOT:=${DISK}2}"
 fi
 
-# !!! do NOT modify below vars !!!
+# START !!! === do NOT modify below vars === !!!
 
 CHROOT_MOUNT='/mnt'
 # Bootloader: ${BOOT_MOUNT}/EFI/${BOOTLOADER_DIR}/grubx64.efi
@@ -50,6 +55,12 @@ LVM_VG='luks_root'
 LVM_LV_ROOT='root'
 LVM_ROOT_PATH="/dev/${LVM_VG}/${LVM_LV_ROOT}"
 LUKS_LVM_MKINITCPIO_HOOKS='HOOKS=(base udev autodetect keyboard keymap consolefont modconf block encrypt lvm2 filesystems fsck)'
+
+# END !!! === do NOT modify above vars === !!!
+
+# Show (only) script-set vars for validation
+declare -p | diff --ed --ignore-matching-lines=PIPESTATUS --ignore-matching-lines='_=' "$BEFORE_VARIABLES" - | grep 'declare' | awk '{print $3}'
+sleep 5
 
 # --- SCRIPT FUNCTIONS ---
 
@@ -143,15 +154,19 @@ if [[ "$INTERACTIVE" -eq 1 ]] ; then
     echo
     echo 'For the following disk-related questions, provide FULL-PATH for each'
     echo '  e.g. /dev/nvme0n1 /dev/nvme0n1p1 /dev/nvme0n1p2'
+    echo 'OR hit ENTER if the default value in [] is okay'
     echo
     lsblk
     echo
     echo "─HARDDRIVE :: DISK [$DISK]: " 
-    read -r DISK
+    read -r READ_DISK
+    : "${DISK:=$READ_DISK}"
     echo "└─BOOT PARTITION :: DISK_PART_BOOT [$DISK_PART_BOOT]: "
-    read -r DISK_PART_BOOT
+    read -r READ_DISK_PART_BOOT
+    : "${DISK_PART_BOOT:=$READ_DISK_PART_BOOT}"
     echo "└─ROOT PARTITION :: DISK_PART_ROOT [$DISK_PART_ROOT]: "
-    read -r DISK_PART_ROOT
+    read -r READ_DISK_PART_ROOT
+    : "${DISK_PART_ROOT:=$READ_DISK_PART_ROOT}"
     echo
 
     yes_or_no "Values collected... Remember, these are not validated... Ready to continue?"
@@ -279,9 +294,14 @@ LUKS_KERNEL_BOOT_PARAM="cryptdevice=UUID=${LUKS_DEVICE_UUID}:${LUKS_CONTAINER} r
 
 # === SYSTEM CONFIG ===
 
+ln --symbolic --force /usr/share/zoneinfo/${SET_TIMEZONE} /etc/localtime
 # Sync time
 timedatectl \
     set-ntp true
+hwclock --systohc
+
+# Valid internet connection required
+ping -c 1 -W 10 archlinux.org
 
 # Set pkg mirrorlist w/ desired options
 # Reference: https://xyne.dev/projects/reflector/
@@ -319,7 +339,7 @@ yes | pacstrap "${CHROOT_MOUNT}" \
     ${GRUB_PKGS}
 
 genfstab \
-    -U \
+    -t UUID \
     -p \
     "${CHROOT_MOUNT}" \
     > "${CHROOT_MOUNT}"/etc/fstab
@@ -328,7 +348,9 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
     echo ${SET_HOSTNAME} > /etc/hostname
     echo -e '127.0.0.1 localhost\n::1 localhost\n127.0.1.1 ${SET_HOSTNAME} $(echo ${SET_HOSTNAME} | cut --fields=1 --delimiter=. -)' > /etc/hosts
     ln --symbolic --force /usr/share/zoneinfo/${SET_TIMEZONE} /etc/localtime
-    hwclock --systohc
+    #timedatectl set-ntp true
+    #sleep 10 && timedatectl status
+    #hwclock --systohc
     echo SET_KEYMAP=${SET_KEYMAP} > /etc/vconsole.conf
     sed --in-place s/#${SET_LANGUAGE}/${SET_LANGUAGE}/ /etc/locale.gen
     locale-gen

@@ -42,8 +42,9 @@ Environment Variables:
     PACKER_BUILD_ARGS can be set and passed through to 'packer build'. This is
     especially useful for any variable in the file 'variables.pkr.hcl'. For
     example, to skip the full system upgrade at the end of a Kali build:
-    
-    PACKER_BUILD_ARGS='-var=full_system_upgrade_command_debian_kali=ls' \
+
+    PACKER_BUILD_ARGS='-var=output_location=/new_location/VirtualMachines/' \\
+    PACKER_BUILD_ARGS='-var=full_system_upgrade_command_debian_kali=ls' \\
         $0 vbox-kali
 
 Options:
@@ -72,7 +73,7 @@ BUILD_NAME:
 # https://www.cyberciti.biz/faq/linux-unix-bsd-apple-osx-bash-get-last-argument/
 for last_arg in "$@" ; do : ; done
 if [[ "${last_arg}" = -* ]] ; then
-    echo "[E] No switch args '-blah' allowed as last argument"
+    echo "[E] No switch args like '${last_arg}' allowed as last argument"
     show_help
     exit 1
 fi

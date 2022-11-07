@@ -37,6 +37,13 @@ variable "autounattend_win_10" {
 
 # --- Local Builds only ---
 
+# overwrite this with a path to build VM elsewhere
+# NOTE: mind any slashes... likely one should add a '/' to the end
+variable "output_location" {
+  type = string
+  default = "YOUR_BUILD_VM-"
+}
+
 # Do NOT show GUI during OS installation (headless mode)
 variable "dont_display_gui" {
   type    = bool
@@ -49,7 +56,7 @@ variable "dont_display_gui" {
 variable "boot_command_debian_kali" {
   type = list(string)
   default = [
-    "<esc><wait> ",
+    "<esc><wait>",
     "auto ",
     "url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/debian_kali/preseed.cfg ",
     "debian-installer=en_US ",
@@ -105,7 +112,7 @@ variable "virtualbox_firmware" {
 
 variable "http_directory" {
   type    = string
-  default = "./common/http"
+  default = "./common/http/"
 }
 
 variable "preeed_server_port_min" {
