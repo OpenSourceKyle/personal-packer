@@ -3,7 +3,7 @@
 *.swp
 output-*
 packer_cache
-YOUR_BUILT_VM*
+YOUR_BUILD_VM*
 *.vm*
 *.nvram
 *.md.backup
