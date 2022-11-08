@@ -62,11 +62,13 @@ variable "full_system_upgrade_command_debian_kali" {
   default = "export DEBIAN_FRONTEND=noninteractive ; echo '* libraries/restart-without-asking boolean true' | sudo debconf-set-selections ; sudo bash -E -c 'apt update --yes && yes | apt dist-upgrade --yes'"
 }
 
+# TODO: fix temporary workaround to work only after failure of local HTTP get
 variable "boot_command_arch" {
   type = list(string)
   default = [
     "<enter><wait60>",
-    "curl --silent http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh | bash -x",
+    #"curl --silent http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh | bash -x",
+    "curl -s https://gitlab.com/thebwitty/packer/-/raw/main/common/http/arch/enable-ssh.sh | bash -x",
     "<enter><wait5>"
   ]
 }

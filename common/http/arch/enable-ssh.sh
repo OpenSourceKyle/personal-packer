@@ -22,7 +22,7 @@ useradd \
 echo "${TEMP_SSH_USER}:${TEMP_SSH_PASSWORD}" | chpasswd \
     --crypt-method SHA512
 
-echo -e 'Defaults env_keep += "SSH_AUTH_SOCK"\nuser ALL=(ALL) NOPASSWD: ALL' \
+echo -e "Defaults env_keep += \"SSH_AUTH_SOCK\"\n${TEMP_SSH_USER} ALL=(ALL) NOPASSWD: ALL" \
     > /etc/sudoers.d/10_user
 
 chmod \
