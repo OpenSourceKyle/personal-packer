@@ -20,27 +20,12 @@ variable "iso_arch_hash" {
   default = "file:https://mirrors.edge.kernel.org/archlinux/iso/latest/sha256sums.txt"
 }
 
-variable "iso_win_10" {
-  type    = string
-  default = "http://download.microsoft.com/download/C/3/9/C399EEA8-135D-4207-92C9-6AAB3259F6EF/10240.16384.150709-1700.TH1_CLIENTENTERPRISEEVAL_OEMRET_X64FRE_EN-US.ISO"
-}
-
-variable "iso_win_10_checksum" {
-  type    = string
-  default = "sha1:56ab095075be28a90bc0b510835280975c6bb2ce"
-}
-
-variable "autounattend_win_10" {
-  type    = string
-  default = "./common/answer_files/10/autounattend.xml"
-}
-
 # --- Local Builds only ---
 
 # overwrite this with a path to build VM elsewhere
 # NOTE: mind any slashes... likely one should add a '/' to the end
 variable "output_location" {
-  type = string
+  type    = string
   default = "YOUR_BUILD_VM-"
 }
 
@@ -65,7 +50,7 @@ variable "boot_command_debian_kali" {
     "console-keymaps-at/keymap=us ",
     "keyboard-configuration/xkb-keymap=us ",
     "<enter><wait> "
-    ]
+  ]
 }
 variable "boot_wait_debian_kali" {
   type    = string
@@ -108,6 +93,12 @@ variable "full_system_upgrade_command_arch" {
 variable "virtualbox_firmware" {
   type    = string
   default = "efi"
+}
+
+# https://developer.hashicorp.com/packer/plugins/builders/virtualbox/iso#creating-an-efi-enabled-vm
+variable "virtualbox_iso_interface" {
+  type    = string
+  default = "sata"
 }
 
 variable "http_directory" {

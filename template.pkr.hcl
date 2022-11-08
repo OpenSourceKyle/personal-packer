@@ -46,6 +46,10 @@ source "virtualbox-iso" "baseline" {
 
   firmware        = var.virtualbox_firmware
   keep_registered = true
+  vboxmanage = [
+    # Disable PAE/NX
+    ["modifyvm", "{{.Name}}", "--pae", "off"],
+  ]
   vboxmanage_post = [
     # Add bridged adapters for default Ethernet and WiFi (in addition to existing NAT)
     ["modifyvm", "{{.Name}}", "--nic2", "bridged", "--bridgeadapter2", "enp3s0"],
@@ -84,6 +88,8 @@ build {
     shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
     iso_url          = var.iso_arch
     iso_checksum     = var.iso_arch_hash
+    # https://developer.hashicorp.com/packer/plugins/builders/virtualbox/iso#creating-an-efi-enabled-vm
+    #iso_interface    = var.virtualbox_iso_interface
   }
 
   # Kali - QEMU (KVM) 
@@ -110,31 +116,6 @@ build {
     iso_url          = var.iso_kali
     iso_checksum     = var.iso_kali_hash
   }
-
-#  # Win_10 - VirtualBox
-#  source "virtualbox-iso.baseline" {
-#    name             = "win_10"
-#    guest_os_type    = "Windows10_64"
-#    output_directory = "${var.output_location}win_10-virtualbox"
-#    floppy_files = [
-#      "${var.autounattend_win_10}",
-#      "./common/scripts/fixnetwork.ps1",
-#      "./common/scripts/microsoft-updates.bat",
-#      "./common/scripts/win-updates.ps1",
-#      "./common/scripts/openssh.ps1"
-#    ]
-#    ssh_wait_timeout = "2h"
-#    iso_checksum     = "${var.iso_win_10_checksum}"
-#    iso_url          = "${var.iso_win_10}"
-#    boot_command     = var.boot_command_win_10
-#    boot_wait        = var.boot_wait_win_10
-#    shutdown_command = "shutdown /s /t 10 /f /d p:4:1 /c \"Packer Shutdown\""
-#    vboxmanage = [
-#      ["modifyvm", "{{ .Name }}", "--boot1", "dvd", "--boot2", "disk"],
-#      #["modifyvm", "{{ .Name }}", "--memory", "${var.memory}"],
-#      #["modifyvm", "{{ .Name }}", "--cpus", "${var.cpus}"],
-#    ]
-#  }
 
   # --- Post-Building Provisioning ---
 
@@ -169,17 +150,4 @@ build {
     only   = ["*.kali"]
     inline = [var.full_system_upgrade_command_debian_kali]
   }
-#  provisioner "shell" {
-#    only            = ["virtualbox-iso.win_10"]
-#    execute_command = "{{ .Vars }} cmd /c C:/Windows/Temp/script.bat"
-#    remote_path     = "/tmp/script.bat"
-#    scripts = [
-#      "./common/scripts/vm-guest-tools.bat",
-#      "./common/scripts/vagrant-ssh.bat",
-#      "./common/scripts/disable-auto-logon.bat",
-#      "./common/scripts/enable-rdp.bat",
-#      "./common/scripts/compile-dotnet-assemblies.bat",
-#      "./common/scripts/compact.bat"
-#    ]
-#  }
 }

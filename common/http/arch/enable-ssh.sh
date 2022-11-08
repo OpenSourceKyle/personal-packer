@@ -6,6 +6,7 @@
 
 set -e
 set -u
+set -x
 
 : "${TEMP_SSH_USER:=user}"
 : "${TEMP_SSH_PASSWORD:=user}"

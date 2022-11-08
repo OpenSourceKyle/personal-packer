@@ -178,6 +178,13 @@ set -u
 
 # === DISK ===
 
+# Unmount all drives from previous runs (just in case)
+set +e
+cryptsetup close "$LUKS_PATH"
+umount -f "$DISK_PART_BOOT"
+umount -f "$DISK_PART_ROOT"
+set -e
+
 # Clearing partition table on "${DISK}"
 sgdisk \
     --zap-all \
