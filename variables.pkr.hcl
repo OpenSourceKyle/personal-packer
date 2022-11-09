@@ -23,7 +23,7 @@ variable "iso_arch_hash" {
 # --- Local Builds only ---
 
 # overwrite this with a path to build VM elsewhere
-# NOTE: mind any slashes... likely one should add a '/' to the end
+# NOTE: mind any slashes...
 variable "output_location" {
   type    = string
   default = "YOUR_BUILD_VM-"
@@ -62,13 +62,14 @@ variable "full_system_upgrade_command_debian_kali" {
   default = "export DEBIAN_FRONTEND=noninteractive ; echo '* libraries/restart-without-asking boolean true' | sudo debconf-set-selections ; sudo bash -E -c 'apt update --yes && yes | apt dist-upgrade --yes'"
 }
 
-# TODO: fix temporary workaround to work only after failure of local HTTP get
 variable "boot_command_arch" {
   type = list(string)
   default = [
     "<enter><wait60>",
-    #"curl --silent http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh | bash -x",
-    "curl -s https://gitlab.com/thebwitty/packer/-/raw/main/common/http/arch/enable-ssh.sh | bash -x",
+    # Packer will try to get the SSH script locally first, and then will try (regardless of success)
+    # to reach out to the internet to get the same script. Mitigates some weird, undiagnosed issue with
+    # how Packer sets up VirtualBox VMs (since this is not a VBox problem when done manually)
+    "curl --connect-timeout 5 --retry 1 --url http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh --url https://gitlab.com/thebwitty/packer/-/raw/main/common/http/arch/enable-ssh.sh | bash",
     "<enter><wait5>"
   ]
 }
