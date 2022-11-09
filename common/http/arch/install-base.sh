@@ -58,10 +58,6 @@ LUKS_LVM_MKINITCPIO_HOOKS='HOOKS=(base udev autodetect keyboard keymap consolefo
 
 # END !!! === do NOT modify above vars === !!!
 
-# Show (only) script-set vars for validation
-declare -p | diff --ed --ignore-matching-lines=PIPESTATUS --ignore-matching-lines='_=' "$BEFORE_VARIABLES" - | grep 'declare' | awk '{print $3}'
-sleep 5
-
 # --- SCRIPT FUNCTIONS ---
 
 show_help () {
@@ -148,7 +144,16 @@ done
 
 # --- Interactive Mode :: Safe Prompts ---
 
+# Show (only) script-set vars for validation
+echo "=== DEFINED VARIABLES FOR BULD ==="
+declare -p | diff --ed --ignore-matching-lines='PIPESTATUS' --ignore-matching-lines='_=' "$BEFORE_VARIABLES" - | grep 'declare' | awk '{print $3}'
+
 if [[ "$INTERACTIVE" -eq 1 ]] ; then
+    # Pause to allow interactive user to review build variables
+    echo "[i] Review script vars above for build... Hit ENTER when done"
+    read
+
+    # Get disk partitioning info
     echo '[i] INTERACTIVE MODE... will prompt for destructive values!'
     echo '!!! NOTE: Values are not validated... that is YOUR job !!!'
     echo
@@ -345,6 +350,7 @@ yes | pacstrap "${CHROOT_MOUNT}" \
     os-prober \
     ${GRUB_PKGS}
 
+# TODO: genfstab sometimes generates bad UUID for boot disk
 genfstab \
     -t UUID \
     -p \

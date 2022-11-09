@@ -53,9 +53,15 @@ source "virtualbox-iso" "baseline" {
   vboxmanage_post = [
     # Add bridged adapters for default Ethernet and WiFi (in addition to existing NAT)
     ["modifyvm", "{{.Name}}", "--nic2", "bridged", "--bridgeadapter2", "enp3s0"],
+    ["modifyvm", "{{.Name}}", "--cableconnected2", "off"],
     ["modifyvm", "{{.Name}}", "--nic3", "bridged", "--bridgeadapter3", "wlp2s0"],
+    ["modifyvm", "{{.Name}}", "--cableconnected3", "off"],
+    # Setup port forwarding: localhost:2222 -> guest_VM:22
+    ["modifyvm", "{{.Name}}", "--nat-pf1", "forwarded_ssh,tcp,,2222,,22"],
     # Disable Remote Display
     ["modifyvm", "{{.Name}}", "--vrde", "off"],
+    # Shared Folder setup
+    ["sharedfolder", "add", "{{.Name}}", "--name", "1_sharedfolder", "--hostpath", "${var.shared_folder_host_path}/VirtualBox VMs/1_sharedfolder", "--automount"],
     # Snapshot VM
     ["snapshot", "{{.Name}}", "take", "CLEAN_BUILD", "--description=Clean build via Packer"],
   ]

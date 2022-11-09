@@ -84,10 +84,6 @@ variable "boot_command_win_10" {
     "<wait1><enter><wait1>",
   ]
 }
-variable "boot_wait_win_10" {
-  type    = string
-  default = "1s"
-}
 variable "full_system_upgrade_command_arch" {
   type    = string
   default = "pacman -S --refresh --refresh --sysupgrade --noconfirm"
@@ -96,6 +92,11 @@ variable "full_system_upgrade_command_arch" {
 variable "virtualbox_firmware" {
   type    = string
   default = "efi"
+}
+
+variable "shared_folder_host_path" {
+  type = string
+  default = env("HOME")
 }
 
 # https://developer.hashicorp.com/packer/plugins/builders/virtualbox/iso#creating-an-efi-enabled-vm
