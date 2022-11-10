@@ -78,12 +78,6 @@ variable "boot_wait_arch" {
   default = "5s"
 }
 
-variable "boot_command_win_10" {
-  type = list(string)
-  default = [
-    "<wait1><enter><wait1>",
-  ]
-}
 variable "full_system_upgrade_command_arch" {
   type    = string
   default = "pacman -S --refresh --refresh --sysupgrade --noconfirm"
