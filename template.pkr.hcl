@@ -15,7 +15,6 @@ source "qemu" "baseline" {
   ssh_timeout            = var.ssh_timeout
   ssh_handshake_attempts = var.ssh_attempts
 
-  shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
   shutdown_timeout = var.shutdown_timeout
 
   iso_target_path = "iso_file"
@@ -37,7 +36,6 @@ source "virtualbox-iso" "baseline" {
   ssh_timeout            = var.ssh_timeout
   ssh_handshake_attempts = var.ssh_attempts
 
-  shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
   shutdown_timeout = var.shutdown_timeout
 
   iso_target_path = "iso_file"
@@ -48,12 +46,22 @@ source "virtualbox-iso" "baseline" {
 
   firmware        = var.virtualbox_firmware
   keep_registered = true
+  vboxmanage = [
+    # Disable PAE/NX
+    ["modifyvm", "{{.Name}}", "--pae", "off"],
+  ]
   vboxmanage_post = [
     # Add bridged adapters for default Ethernet and WiFi (in addition to existing NAT)
     ["modifyvm", "{{.Name}}", "--nic2", "bridged", "--bridgeadapter2", "enp3s0"],
+    ["modifyvm", "{{.Name}}", "--cableconnected2", "off"],
     ["modifyvm", "{{.Name}}", "--nic3", "bridged", "--bridgeadapter3", "wlp2s0"],
+    ["modifyvm", "{{.Name}}", "--cableconnected3", "off"],
+    # Setup port forwarding: localhost:2222 -> guest_VM:22
+    ["modifyvm", "{{.Name}}", "--nat-pf1", "forwarded_ssh,tcp,,2222,,22"],
     # Disable Remote Display
     ["modifyvm", "{{.Name}}", "--vrde", "off"],
+    # Shared Folder setup
+    ["sharedfolder", "add", "{{.Name}}", "--name", "1_sharedfolder", "--hostpath", "${var.shared_folder_host_path}/VirtualBox VMs/1_sharedfolder", "--automount"],
     # Snapshot VM
     ["snapshot", "{{.Name}}", "take", "CLEAN_BUILD", "--description=Clean build via Packer"],
   ]
@@ -67,44 +75,50 @@ build {
   source "qemu.baseline" {
     name             = "arch"
     vm_name          = "packer_arch.img"
-    output_directory = "YOUR_BUILT_VM-arch-qemu"
+    output_directory = "${var.output_location}arch-qemu"
     boot_command     = var.boot_command_arch
     boot_wait        = var.boot_wait_arch
+    shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
     iso_url          = var.iso_arch
     iso_checksum     = var.iso_arch_hash
   }
 
-  # Arch - Virtualbox
+  # Arch - VirtualBox
   source "virtualbox-iso.baseline" {
     name             = "arch"
     guest_os_type    = "ArchLinux_64"
     vm_name          = "packer_arch.img"
-    output_directory = "YOUR_BUILT_VM-arch-virtualbox"
+    output_directory = "${var.output_location}arch-virtualbox"
     boot_command     = var.boot_command_arch
     boot_wait        = var.boot_wait_arch
+    shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
     iso_url          = var.iso_arch
     iso_checksum     = var.iso_arch_hash
+    # https://developer.hashicorp.com/packer/plugins/builders/virtualbox/iso#creating-an-efi-enabled-vm
+    #iso_interface    = var.virtualbox_iso_interface
   }
 
   # Kali - QEMU (KVM) 
   source "qemu.baseline" {
     name             = "kali"
     vm_name          = "packer_kali.img"
-    output_directory = "YOUR_BUILT_VM-kali-qemu"
+    output_directory = "${var.output_location}kali-qemu"
     boot_command     = var.boot_command_debian_kali
     boot_wait        = var.boot_wait_debian_kali
+    shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
     iso_url          = var.iso_kali
     iso_checksum     = var.iso_kali_hash
   }
 
-  # Kali - Virtualbox
+  # Kali - VirtualBox
   source "virtualbox-iso.baseline" {
     name             = "kali"
     guest_os_type    = "Debian_64"
     vm_name          = "packer_kali.img"
-    output_directory = "YOUR_BUILT_VM-kali-virtualbox"
+    output_directory = "${var.output_location}kali-virtualbox"
     boot_command     = var.boot_command_debian_kali
     boot_wait        = var.boot_wait_debian_kali
+    shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
     iso_url          = var.iso_kali
     iso_checksum     = var.iso_kali_hash
   }

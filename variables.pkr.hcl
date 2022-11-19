@@ -22,6 +22,13 @@ variable "iso_arch_hash" {
 
 # --- Local Builds only ---
 
+# overwrite this with a path to build VM elsewhere
+# NOTE: mind any slashes...
+variable "output_location" {
+  type    = string
+  default = "YOUR_BUILD_VM-"
+}
+
 # Do NOT show GUI during OS installation (headless mode)
 variable "dont_display_gui" {
   type    = bool
@@ -33,9 +40,17 @@ variable "dont_display_gui" {
 # Boot Command: https://www.debian.org/releases/stable/amd64/apbs02#preseed-aliases
 variable "boot_command_debian_kali" {
   type = list(string)
-  default = ["<esc><wait>",
-    "auto url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/debian_kali/preseed.cfg debian-installer=en_US locale=en_US kbd-chooser/method=us console-keymaps-at/keymap=us keyboard-configuration/xkb-keymap=us",
-  "<enter><wait>"]
+  default = [
+    "<esc><wait>",
+    "auto ",
+    "url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/debian_kali/preseed.cfg ",
+    "debian-installer=en_US ",
+    "locale=en_US ",
+    "kbd-chooser/method=us ",
+    "console-keymaps-at/keymap=us ",
+    "keyboard-configuration/xkb-keymap=us ",
+    "<enter><wait> "
+  ]
 }
 variable "boot_wait_debian_kali" {
   type    = string
@@ -51,7 +66,10 @@ variable "boot_command_arch" {
   type = list(string)
   default = [
     "<enter><wait60>",
-    "curl --silent http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh | bash -x",
+    # Packer will try to get the SSH script locally first, and then will try (regardless of success)
+    # to reach out to the internet to get the same script. Mitigates some weird, undiagnosed issue with
+    # how Packer sets up VirtualBox VMs (since this is not a VBox problem when done manually)
+    "curl --connect-timeout 5 --retry 1 --url http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh --url https://gitlab.com/thebwitty/packer/-/raw/main/common/http/arch/enable-ssh.sh | bash",
     "<enter><wait5>"
   ]
 }
@@ -70,9 +88,20 @@ variable "virtualbox_firmware" {
   default = "efi"
 }
 
+variable "shared_folder_host_path" {
+  type = string
+  default = env("HOME")
+}
+
+# https://developer.hashicorp.com/packer/plugins/builders/virtualbox/iso#creating-an-efi-enabled-vm
+variable "virtualbox_iso_interface" {
+  type    = string
+  default = "sata"
+}
+
 variable "http_directory" {
   type    = string
-  default = "./common/http"
+  default = "./common/http/"
 }
 
 variable "preeed_server_port_min" {

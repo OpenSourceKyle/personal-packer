@@ -76,7 +76,7 @@ PACKER_LOG=1 packer build .
 # TODO
 
 * Arch Linux:
-  - `base-install.sh`: `genfstab` rarely generates the wrong UUID for the boot drive, which breaks GRUB; this has only been noticed on specific hardware and not in VMs
+- `base-install.sh`: `genfstab` rarely generates the wrong UUID for the boot drive, which breaks GRUB; this has only been noticed on specific hardware and not in VMs; manually validate or set with `lsblk` output
 
 # References:
 
