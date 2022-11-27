@@ -45,7 +45,7 @@ variable "boot_command_debian_kali" {
   type = list(string)
   default = [
     "<esc><wait>",
-    "auto ",  # NEITHER auto=true NOR auto-install/enable[=true] WORKS ; only "auto"
+    "auto ", # NEITHER auto=true NOR auto-install/enable[=true] WORKS ; only "auto"
     "DEBCONF_DEBUG=5 ",
     "preseed/url=https://gitlab.com/thebwitty/packer/-/raw/main/common/http/debian_kali/preseed.cfg ",
     "debian-installer=en_US ",
@@ -93,7 +93,7 @@ variable "virtualbox_firmware" {
 }
 
 variable "shared_folder_host_path" {
-  type = string
+  type    = string
   default = env("HOME")
 }
 
