@@ -38,12 +38,16 @@ variable "dont_display_gui" {
 # --- RECOMMENDED TO NOT CHANGE --- 
 
 # Boot Command: https://www.debian.org/releases/stable/amd64/apbs02#preseed-aliases
+# Boot Command: https://hands.com/d-i/
+# Removed due to local networking limitations:
+# "url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/debian_kali/preseed.cfg ",
 variable "boot_command_debian_kali" {
   type = list(string)
   default = [
     "<esc><wait>",
+    "DEBCONF_DEBUG=5 ",
     "auto ",
-    "url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/debian_kali/preseed.cfg ",
+    "url=https://gitlab.com/thebwitty/packer/-/raw/main/common/http/debian_kali/preseed.cfg ",
     "debian-installer=en_US ",
     "locale=en_US ",
     "kbd-chooser/method=us ",
