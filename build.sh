@@ -107,7 +107,7 @@ else
 
             # BUILD_NAMEs
             vbox-kali)
-                echo "[i] Currently only BIOS mode is supported!"
+                echo "[i] Currently only BIOS mode is supported for autoinstall!"
                 PACKER_BUILD_ARGS+=" -var=virtualbox_firmware=bios"
                 echo "[i] Using latest Kali image"
                 kali_latest
