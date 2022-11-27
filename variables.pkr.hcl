@@ -45,14 +45,14 @@ variable "boot_command_debian_kali" {
   type = list(string)
   default = [
     "<esc><wait>",
+    "auto ",  # NEITHER auto=true NOR auto-install/enable[=true] WORKS ; only "auto"
     "DEBCONF_DEBUG=5 ",
-    "auto ",
-    "url=https://gitlab.com/thebwitty/packer/-/raw/main/common/http/debian_kali/preseed.cfg ",
+    "preseed/url=https://gitlab.com/thebwitty/packer/-/raw/main/common/http/debian_kali/preseed.cfg ",
     "debian-installer=en_US ",
-    "locale=en_US ",
+    "debian-installer/locale=en_US ",
     "kbd-chooser/method=us ",
-    "console-keymaps-at/keymap=us ",
     "keyboard-configuration/xkb-keymap=us ",
+    "console-keymaps-at/keymap=us ",
     "<enter><wait> "
   ]
 }
