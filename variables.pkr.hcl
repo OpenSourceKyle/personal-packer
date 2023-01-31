@@ -47,7 +47,7 @@ variable "boot_command_debian_kali" {
     "<esc><wait>",
     "auto ", # NEITHER auto=true NOR auto-install/enable[=true] WORKS ; only "auto"
     "DEBCONF_DEBUG=5 ",
-    "preseed/url=https://gitlab.com/thebwitty/packer/-/raw/main/common/http/debian_kali/preseed.cfg ",
+    "preseed/url=https://gitlab.com/crappy_code_wizard/packer/-/raw/main/common/http/debian_kali/preseed.cfg ",
     "debian-installer=en_US ",
     "debian-installer/locale=en_US ",
     "kbd-chooser/method=us ",
@@ -73,7 +73,7 @@ variable "boot_command_arch" {
     # Packer will try to get the SSH script locally first, and then will try (regardless of success)
     # to reach out to the internet to get the same script. Mitigates some weird, undiagnosed issue with
     # how Packer sets up VirtualBox VMs (since this is not a VBox problem when done manually)
-    "curl --connect-timeout 5 --retry 1 --url http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh --url https://gitlab.com/thebwitty/packer/-/raw/main/common/http/arch/enable-ssh.sh | bash",
+    "curl --connect-timeout 5 --retry 1 --url http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh --url https://gitlab.com/crappy_code_wizard/packer/-/raw/main/common/http/arch/enable-ssh.sh | bash",
     "<enter><wait5>"
   ]
 }
