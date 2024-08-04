@@ -4,15 +4,21 @@ Locally build Virtual Machines from-scratch using 1-command.
 
 ## Pre-requisites
 
-* Local Builds:
-  * Packer installation: [Packer Installation](https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
-  * Run `./run_first_time_setup.sh` once manually before running any `packer` commands
+Reference: [Packer Installation](https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
+
+```
+# Install Packer
+sudo pacman -S packer
+
+# Only necessary if running raw `packer` commands
+./run_first_time_setup.sh
+```
 
 # Usage
 
-## Quickstart
+## Quickstart Build
 
-Use the included `build_vm.sh` script to handle Packer. More advanced commands will need to be ran manually.
+Use the included `build_vm.sh` script to handle Packer; it runs `run_first_time_setup.sh` automatically. More advanced commands will need to be ran manually.
 
 ```shell
 ./build_vm.sh --help
@@ -20,37 +26,6 @@ Use the included `build_vm.sh` script to handle Packer. More advanced commands w
 ./build_vm.sh vbox-arch
 ./build_vm.sh qemu-arch 
 ```
-
-## Build
-
-NOTE: This is not recommended since multiple virtualization platforms are supported in this template, which conflict (e.g. QEMU & VirtualBox).
-
-```shell
-# Build all templates
-
-packer build .
-```
----
-
-## Sample Build Times
-
-Packer runs fairly quickly, depending on if updates or large packages are installed or not. Below are some rough build times to give an estimate:
-
-### Kali
-
-#### With full system upgrade (as of March 2022)
-* 39 minutes 35 seconds
-_this time will largely depend on how out-of-date the ISO is versus the current rolling distro state_
-
-#### Without full system upgrade
-* 27 minutes 14 seconds
-
-### Arch (as of August 2022)
-
-NOTE: Arch can be built to UEFI/GPT or BIOS/MBR and should automatically detect and set all the respective values for each.
-
-#### Minimal build
-* 3 minutes 12 seconds
 
 # Troubleshooting Common Issues:
 
@@ -61,10 +36,7 @@ Some simple solutions to common problems.
 Packer deletes a VM by default on failure instead of asking. By keeping the VM (that will stay running as well), triage can be possible to troubleshoot a build failure.
 
 ```shell
-# Add the argument `-on-error=ask` after the subcommand like:
-packer build \
-    -on-error=ask \
-    .
+./build_vm.sh --ask <BUILD>
 ```
 
 ## Show debug output
@@ -72,14 +44,15 @@ packer build \
 Packer only has debug output, which is similar to setting a verbosity option (e.g. `-v` or `--verbose`) in other programs.
 
 ```shell
-# Append `PACKER_LOG=1` environment variable to a packer run like:
-PACKER_LOG=1 packer build .
+./build_vm.sh --verbose <BUILD>
 ```
 
 * [Packer Docs](https://www.packer.io/docs)
 
-## Packer Templates 
+## Packer Templates
+
 Templates can be useful examples, and there are many such templates on the Internet. During my experimentation with using many of them, I learned the hard way that many do not work "out-of-the-box" and using the Packer documentation was much simpler than a poorly documented, old template. Be cautious for a few reasons:
+
 - some templates use the old template format in JSON instead of the newer HCL format
 - some templates might not work without a lot of variable configuration (because the templates are heavily parameterized)
 - some templates might not work because they are simply out-of-date with newer packer versions
