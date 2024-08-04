@@ -21,7 +21,7 @@ declare -p > "$BEFORE_VARIABLES"
 : "${SET_HOSTNAME:=arch.localhost}"
 : "${SET_KEYMAP:=us}"
 : "${SET_LANGUAGE:=en_US.UTF-8}"
-: "${SET_TIMEZONE:=US/Central}"  # from /usr/share/zoneinfo/
+: "${SET_TIMEZONE:=Mexico/General}"  # from /usr/share/zoneinfo/
 : "${ARCH_MIRROR_COUNTRY:=US}"  # reflector --list-countries
 : "${LUKS_PASSWORD:=user}"
 : "${ROOT_PASSWORD:=root}"
