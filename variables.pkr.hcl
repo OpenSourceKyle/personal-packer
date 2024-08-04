@@ -1,15 +1,6 @@
 # https://www.packer.io/docs/templates/hcl_templates/variables
 # packer validate .
 
-variable "iso_kali" {
-  type    = string
-  default = "https://kali.download/base-images/current/kali-linux-2022.2-installer-amd64.iso"
-}
-variable "iso_kali_hash" {
-  type    = string
-  default = "file:https://kali.download/base-images/current/SHA256SUMS"
-}
-
 variable "iso_arch" {
   type    = string
   default = "https://mirrors.edge.kernel.org/archlinux/iso/latest/archlinux-x86_64.iso"
@@ -37,35 +28,6 @@ variable "dont_display_gui" {
 
 # --- RECOMMENDED TO NOT CHANGE --- 
 
-# Boot Command: https://www.debian.org/releases/stable/amd64/apbs02#preseed-aliases
-# Boot Command: https://hands.com/d-i/
-# Removed due to local networking limitations:
-# "url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/debian_kali/preseed.cfg ",
-variable "boot_command_debian_kali" {
-  type = list(string)
-  default = [
-    "<esc><wait>",
-    "auto ", # NEITHER auto=true NOR auto-install/enable[=true] WORKS ; only "auto"
-    "DEBCONF_DEBUG=5 ",
-    "preseed/url=https://gitlab.com/crappy_code_wizard/packer/-/raw/main/common/http/debian_kali/preseed.cfg ",
-    "debian-installer=en_US ",
-    "debian-installer/locale=en_US ",
-    "kbd-chooser/method=us ",
-    "keyboard-configuration/xkb-keymap=us ",
-    "console-keymaps-at/keymap=us ",
-    "<enter><wait> "
-  ]
-}
-variable "boot_wait_debian_kali" {
-  type    = string
-  default = "8s"
-}
-
-variable "full_system_upgrade_command_debian_kali" {
-  type    = string
-  default = "export DEBIAN_FRONTEND=noninteractive ; echo '* libraries/restart-without-asking boolean true' | sudo debconf-set-selections ; sudo bash -E -c 'apt update --yes && yes | apt dist-upgrade --yes'"
-}
-
 variable "boot_command_arch" {
   type = list(string)
   default = [
@@ -73,7 +35,7 @@ variable "boot_command_arch" {
     # Packer will try to get the SSH script locally first, and then will try (regardless of success)
     # to reach out to the internet to get the same script. Mitigates some weird, undiagnosed issue with
     # how Packer sets up VirtualBox VMs (since this is not a VBox problem when done manually)
-    "curl --connect-timeout 5 --retry 1 --url http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh --url https://gitlab.com/crappy_code_wizard/packer/-/raw/main/common/http/arch/enable-ssh.sh | bash",
+    "curl --connect-timeout 5 --retry 1 --url http://{{ .HTTPIP }}:{{ .HTTPPort }}/arch/enable-ssh.sh --url https://gitlab.com/thekylewitty/packer/-/raw/main/common/http/arch/enable-ssh.sh | bash",
     "<enter><wait5>"
   ]
 }

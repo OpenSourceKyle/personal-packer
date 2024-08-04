@@ -45,7 +45,6 @@ fi
 # START !!! === do NOT modify below vars === !!!
 
 CHROOT_MOUNT='/mnt'
-# Bootloader: ${BOOT_MOUNT}/EFI/${BOOTLOADER_DIR}/grubx64.efi
 BOOT_MOUNT='/boot'
 BOOTLOADER_DIR='boot'
 
@@ -161,17 +160,17 @@ if [[ "$INTERACTIVE" -eq 1 ]] ; then
     echo '  e.g. /dev/nvme0n1 /dev/nvme0n1p1 /dev/nvme0n1p2'
     echo 'OR hit ENTER if the default value in [] is okay'
     echo
-    lsblk
+    lsblk --fs
     echo
     echo "─HARDDRIVE :: DISK [$DISK]: " 
     read -r READ_DISK
-    : "${DISK:=$READ_DISK}"
+    DISK=READ_DISK
     echo "└─BOOT PARTITION :: DISK_PART_BOOT [$DISK_PART_BOOT]: "
     read -r READ_DISK_PART_BOOT
-    : "${DISK_PART_BOOT:=$READ_DISK_PART_BOOT}"
+    DISK_PART_BOOT=READ_DISK_PART_BOOT
     echo "└─ROOT PARTITION :: DISK_PART_ROOT [$DISK_PART_ROOT]: "
     read -r READ_DISK_PART_ROOT
-    : "${DISK_PART_ROOT:=$READ_DISK_PART_ROOT}"
+    DISK_PART_ROOT=READ_DISK_PART_ROOT
     echo
 
     yes_or_no "Values collected... Remember, these are not validated... Ready to continue?"

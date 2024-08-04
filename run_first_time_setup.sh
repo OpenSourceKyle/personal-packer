@@ -25,3 +25,6 @@ else
 fi
 chmod -v 600 "$PACKER_SSH_PRIV"/id_rsa
 border
+
+packer plugins install github.com/hashicorp/virtualbox
+packer plugins install github.com/hashicorp/qemu

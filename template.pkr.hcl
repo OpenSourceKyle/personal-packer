@@ -98,31 +98,6 @@ build {
     #iso_interface    = var.virtualbox_iso_interface
   }
 
-  # Kali - QEMU (KVM) 
-  source "qemu.baseline" {
-    name             = "kali"
-    vm_name          = "packer_kali.img"
-    output_directory = "${var.output_location}kali-qemu"
-    boot_command     = var.boot_command_debian_kali
-    boot_wait        = var.boot_wait_debian_kali
-    shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
-    iso_url          = var.iso_kali
-    iso_checksum     = var.iso_kali_hash
-  }
-
-  # Kali - VirtualBox
-  source "virtualbox-iso.baseline" {
-    name             = "kali"
-    guest_os_type    = "Debian_64"
-    vm_name          = "packer_kali.img"
-    output_directory = "${var.output_location}kali-virtualbox"
-    boot_command     = var.boot_command_debian_kali
-    boot_wait        = var.boot_wait_debian_kali
-    shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
-    iso_url          = var.iso_kali
-    iso_checksum     = var.iso_kali_hash
-  }
-
   # --- Post-Building Provisioning ---
 
   # Create ~/.ssh directory
@@ -149,11 +124,5 @@ build {
     only            = ["virtualbox-iso.arch"]
     execute_command = "sudo --preserve-env bash -c '{{ .Vars}} {{ .Path }} --noninteractive #--update-archlinux-keyring'"
     script          = "common/http/arch/install-base.sh"
-  }
-  # Perform full system update/upgrade
-  # NOTE: this will take some time on rolling-updates OSes
-  provisioner "shell" {
-    only   = ["*.kali"]
-    inline = [var.full_system_upgrade_command_debian_kali]
   }
 }
