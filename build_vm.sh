@@ -10,13 +10,6 @@
 
 # ---
 
-# Kali does not have a nice URL download pathway, so this discerns the latest
-# version name (e.g. '2022.3') and overwrites that Packer variable
-kali_latest () {
-    KALI_VERSION="$(curl --silent https://cdimage.kali.org/current/ | grep --perl-regexp --only-matching 'kali-linux-.*?-installer.amd64.iso' | uniq)"
-    PACKER_BUILD_ARGS+=" -var=iso_kali=https://cdimage.kali.org/current/${KALI_VERSION}"
-}
-
 packer_build () {
     # $1 : Hypervisor+OS build
     # $2 : any other CLI args that might be needed
@@ -36,7 +29,7 @@ Usage:
     [PACKER_BUILD_ARGS=''] $0 [-OPTION, ...] BUILD_NAME
 
 Example:
-    $0 -t -f vbox-kali
+    $0 -t -f vbox-arch
 
 Environment Variables:
     PACKER_BUILD_ARGS can be set and passed through to 'packer build'. This is
@@ -44,8 +37,7 @@ Environment Variables:
     example, to skip the full system upgrade at the end of a Kali build:
 
     PACKER_BUILD_ARGS='-var=output_location=/new_location/VirtualMachines/' \\
-    PACKER_BUILD_ARGS='-var=full_system_upgrade_command_debian_kali=ls' \\
-        $0 vbox-kali
+        $0 vbox-arch
 
 Options:
     NOTE: These MUST come before the BUILD_NAME & must be separated by spaces.
@@ -62,8 +54,8 @@ BUILD_NAME:
     The {Hypervisor}-{OS} to build. Most names should be self-explanatory.
 
     Supported BUILD_NAMEs:
-        * vbox-kali
         * vbox-arch
+        * qemu-arch
    " 
 }
 
@@ -76,6 +68,13 @@ if [[ "${last_arg}" = -* ]] ; then
     echo "[E] No switch args like '${last_arg}' allowed as last argument"
     show_help
     exit 1
+fi
+
+# Ensure initial setup is complete
+FIRST_TIME_SETUP="/tmp/packer-${0#./}"
+if [[ ! -e "$FIRST_TIME_SETUP" ]] ; then
+    ./run_first_time_setup.sh
+    touch "$FIRST_TIME_SETUP"
 fi
 
 # ARGS always required
@@ -106,25 +105,11 @@ else
                 ;;
 
             # BUILD_NAMEs
-            vbox-kali)
-                echo "[i] Currently only BIOS mode is supported for autoinstall!"
-                PACKER_BUILD_ARGS+=" -var=virtualbox_firmware=bios"
-                echo "[i] Using latest Kali image"
-                kali_latest
-                packer_build virtualbox-iso.kali
-                break
-                ;;
-            qemu-kali)
-                printf "\n!!! CURRENTLY UNTESTED !!!\n"
-                packer_build qemu.kali
-                break
-                ;;
             vbox-arch)
                 packer_build virtualbox-iso.arch
                 break
                 ;;
             qemu-arch)
-                printf "\n!!! CURRENTLY UNTESTED !!!\n"
                 packer_build qemu.arch
                 break
                 ;;

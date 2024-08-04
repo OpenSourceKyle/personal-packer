@@ -12,10 +12,13 @@ Locally build Virtual Machines from-scratch using 1-command.
 
 ## Quickstart
 
-Use the included `build.sh` script to handle Packer. More advanced commands will need to be ran manually.
+Use the included `build_vm.sh` script to handle Packer. More advanced commands will need to be ran manually.
 
 ```shell
-./build.sh --help
+./build_vm.sh --help
+
+./build_vm.sh vbox-arch
+./build_vm.sh qemu-arch 
 ```
 
 ## Build
@@ -72,14 +75,6 @@ Packer only has debug output, which is similar to setting a verbosity option (e.
 # Append `PACKER_LOG=1` environment variable to a packer run like:
 PACKER_LOG=1 packer build .
 ```
-
-# TODO
-
-* Arch Linux:
-- `base-install.sh`: `genfstab` rarely generates the wrong UUID for the boot drive, which breaks GRUB; this has only been noticed on specific hardware and not in VMs; manually validate or set with `lsblk` output
-- consider replacing `pacstrap -K` for the keyring update
-
-# References:
 
 * [Packer Docs](https://www.packer.io/docs)
 
