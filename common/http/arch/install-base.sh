@@ -23,10 +23,10 @@ declare -p > "$BEFORE_VARIABLES"
 : "${SET_LANGUAGE:=en_US.UTF-8}"
 : "${SET_TIMEZONE:=Mexico/General}"  # from /usr/share/zoneinfo/
 : "${ARCH_MIRROR_COUNTRY:=US}"  # reflector --list-countries
-: "${LUKS_PASSWORD:=user}"
-: "${ROOT_PASSWORD:=root}"
-: "${USER_NAME:=user}"
-: "${USER_PASSWORD:=user}"
+: "${LUKS_PASSWORD:=vagrant}"
+: "${ROOT_PASSWORD:=vagrant}"
+: "${USER_NAME:=vagrant}"
+: "${USER_PASSWORD:=vagrant}"
 
 # Discern main disk drive to provision (QEMU & VBox compatible)
 # NOTE: This will automatically prefer SSDs (nvme) over normal harddisks (sda)
@@ -312,11 +312,13 @@ timedatectl \
 hwclock --systohc
 
 # Valid internet connection required
-ping -c 1 -W 10 archlinux.org
+ping -c 1 -W 10 1.1.1.1
 
 # Set pkg mirrorlist w/ desired options
 # Reference: https://xyne.dev/projects/reflector/
-reflector \
+MIRRORLIST=/etc/pacman.d/mirrorlist
+# Allow reflector to fail without exiting
+if ! reflector \
     --country "${ARCH_MIRROR_COUNTRY}" \
     --ipv4 \
     --latest 10 \
@@ -324,7 +326,9 @@ reflector \
     --protocol https \
     --sort rate \
     --threads 5 \
-    --save /etc/pacman.d/mirrorlist
+    --save "$MIRRORLIST"; then
+    echo "WARNING: reflector failed, continuing with existing mirrorlist: $MIRRORLIST"
+fi
 
 # pacstrap installation
 sed \

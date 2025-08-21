@@ -1,7 +1,7 @@
 *.iso
 *lock
 *.swp
-output-*
+output*
 packer_cache
 YOUR_BUILD_VM*
 *.vm*

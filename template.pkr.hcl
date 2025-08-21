@@ -1,128 +1,96 @@
-# --- Baseline Configurations ---
-
+# ============================================================================
+# PACKER TEMPLATE (QEMU ONLY)
 # https://www.packer.io/plugins/builders/qemu
-source "qemu" "baseline" {
-  cpus      = var.cpus
-  memory    = var.memory
-  disk_size = var.disk_size
-  headless  = var.dont_display_gui
+# ============================================================================
+#
+# Defines the Packer build process for a QEMU/libvirt Arch Linux box.
+#
+# Build with:
+#   packer init .
+#   packer build .
+#
+# ============================================================================
 
-  http_directory = var.http_directory
-
-  communicator           = "ssh"
-  ssh_username           = var.vm_username
-  ssh_password           = var.vm_password
-  ssh_timeout            = var.ssh_timeout
-  ssh_handshake_attempts = var.ssh_attempts
-
-  shutdown_timeout = var.shutdown_timeout
-
-  iso_target_path = "iso_file"
+packer {
+  required_plugins {
+    qemu = {
+      version = ">= 1.0.0"
+      source  = "github.com/hashicorp/qemu"
+    }
+  }
 }
 
-# https://www.packer.io/plugins/builders/virtualbox/iso
-source "virtualbox-iso" "baseline" {
-  cpus                 = var.cpus
-  memory               = var.memory
-  disk_size            = var.disk_size
-  guest_additions_mode = "disable"
-  headless             = var.dont_display_gui
+# ============================================================================
+# SOURCE DEFINITION
+# ============================================================================
 
-  http_directory = var.http_directory
+source "qemu" "arch" {
+  # Hardware
+  cpus               = var.cpus
+  memory             = var.memory
+  disk_size          = var.disk_size
+  headless           = var.dont_display_gui
 
-  communicator           = "ssh"
-  ssh_username           = var.vm_username
-  ssh_password           = var.vm_password
-  ssh_timeout            = var.ssh_timeout
-  ssh_handshake_attempts = var.ssh_attempts
+  # ISO and Boot
+  iso_url            = var.iso_arch
+  iso_checksum       = var.iso_arch_hash
+  http_directory     = var.http_directory
+  boot_command       = var.boot_command_arch
+  boot_wait          = var.boot_wait_arch
+  shutdown_command   = "echo '${var.vm_password}' | sudo -S shutdown -P now"
+  shutdown_timeout   = var.shutdown_timeout
 
-  shutdown_timeout = var.shutdown_timeout
-
-  iso_target_path = "iso_file"
-
-  # https://wiki.archlinux.org/title/VirtualBox/Install_Arch_Linux_as_a_guest#Fullscreen_mode_shows_blank_screen
-  gfx_controller = "vmsvga"
-  gfx_vram_size  = "64"
-
-  firmware        = var.virtualbox_firmware
-  keep_registered = true
-  vboxmanage = [
-    # Disable PAE/NX
-    ["modifyvm", "{{.Name}}", "--pae", "off"],
-  ]
-  vboxmanage_post = [
-    # Add bridged adapters for default Ethernet and WiFi (in addition to existing NAT)
-    ["modifyvm", "{{.Name}}", "--nic2", "bridged", "--bridgeadapter2", "enp3s0"],
-    ["modifyvm", "{{.Name}}", "--cableconnected2", "off"],
-    ["modifyvm", "{{.Name}}", "--nic3", "bridged", "--bridgeadapter3", "wlp2s0"],
-    ["modifyvm", "{{.Name}}", "--cableconnected3", "off"],
-    # Setup port forwarding: localhost:2222 -> guest_VM:22
-    ["modifyvm", "{{.Name}}", "--nat-pf1", "forwarded_ssh,tcp,,2222,,22"],
-    # Disable Remote Display
-    ["modifyvm", "{{.Name}}", "--vrde", "off"],
-    # Shared Folder setup
-    ["sharedfolder", "add", "{{.Name}}", "--name", "1_sharedfolder", "--hostpath", "${var.shared_folder_host_path}/VirtualBox VMs/1_sharedfolder", "--automount"],
-    # Snapshot VM
-    ["snapshot", "{{.Name}}", "take", "CLEAN_BUILD", "--description=Clean build via Packer"],
-  ]
+  # Communicator
+  communicator       = "ssh"
+  ssh_username       = var.vm_username
+  ssh_password       = var.vm_password
+  ssh_timeout        = var.ssh_timeout
+  
+  # Output
+  vm_name            = "packer_arch.qcow2"
+  output_directory   = "${var.output_location}arch-qemu"
 }
 
-# --- Build Blocks ---
+# ============================================================================
+# BUILD BLOCK
+# ============================================================================
 
 build {
+  # Tell Packer which source to build.
+  sources = ["source.qemu.arch"]
 
-  # Arch - QEMU (KVM) 
-  source "qemu.baseline" {
-    name             = "arch"
-    vm_name          = "packer_arch.img"
-    output_directory = "${var.output_location}arch-qemu"
-    boot_command     = var.boot_command_arch
-    boot_wait        = var.boot_wait_arch
-    shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
-    iso_url          = var.iso_arch
-    iso_checksum     = var.iso_arch_hash
-  }
+  # --- PROVISIONING ---
+  # These steps run inside the VM after SSH is available on the live ISO.
 
-  # Arch - VirtualBox
-  source "virtualbox-iso.baseline" {
-    name             = "arch"
-    guest_os_type    = "ArchLinux_64"
-    vm_name          = "packer_arch.img"
-    output_directory = "${var.output_location}arch-virtualbox"
-    boot_command     = var.boot_command_arch
-    boot_wait        = var.boot_wait_arch
-    shutdown_command = "echo '${var.vm_password}' | sudo --stdin shutdown --poweroff now"
-    iso_url          = var.iso_arch
-    iso_checksum     = var.iso_arch_hash
-    # https://developer.hashicorp.com/packer/plugins/builders/virtualbox/iso#creating-an-efi-enabled-vm
-    #iso_interface    = var.virtualbox_iso_interface
-  }
-
-  # --- Post-Building Provisioning ---
-
-  # Create ~/.ssh directory
+  # Step 1: Run the main OS installation script from your http directory.
+  # This is a critical step to install Arch to the virtual disk.
   provisioner "shell" {
-    inline = ["rm -rf ~/.ssh/", "mkdir ~/.ssh"]
+    execute_command = "echo '${var.vm_password}' | sudo -S -E bash -c '{{ .Vars }} {{ .Path }} --noninteractive'"
+    script          = "common/http/arch/install-base.sh"
   }
-  # Copy in pre-built keys
-  provisioner "file" {
-    sources     = ["./common/ssh_keys_for_packer/"]
-    destination = "~/.ssh/"
-  }
-  # Ensure SSH keys permissions are correct & passwordless sudo user exists
+
+  # Step 2: Configure the 'vagrant' user for Vagrant compatibility.
   provisioner "shell" {
+    inline_shebang = "/bin/bash -e"
     inline = [
-      "echo '${var.vm_password}' | sudo --stdin /bin/sh -c 'echo \"${var.vm_username} ALL=(ALL) NOPASSWD: ALL\" | tee /etc/sudoers.d/11_passwordless_sudo_user && chmod 440 /etc/sudoers.d/11_passwordless_sudo_user && visudo --check --strict'",
-      "chmod 700 ~/.ssh",
-      "chmod 644 --recursive ~/.ssh/*",
-      "chmod 600 ~/.ssh/id_rsa",
-      "chmod g-w,o-w ~",
-      "touch ~/VM_CREATED_ON_\"$(date +%Y-%m-%d_%H-%M-%S)\""
+      "echo '==> Configuring passwordless sudo for vagrant user'",
+      "echo '${var.vm_password}' | sudo -S /bin/sh -c 'echo \"${var.vm_username} ALL=(ALL) NOPASSWD: ALL\" > /etc/sudoers.d/10-vagrant && chmod 440 /etc/sudoers.d/10-vagrant'",
+      
+      "echo \"==> Installing Vagrant's default insecure public SSH key\"",
+      "mkdir -p /home/${var.vm_username}/.ssh",
+      "chmod 700 /home/${var.vm_username}/.ssh",
+      "curl -fsSLo /home/${var.vm_username}/.ssh/authorized_keys https://raw.githubusercontent.com/hashicorp/vagrant/main/keys/vagrant.pub",
+      "chmod 600 /home/${var.vm_username}/.ssh/authorized_keys",
+      "chown -R ${var.vm_username}:${var.vm_username} /home/${var.vm_username}/.ssh",
+      
+      "echo '==> Recording build time'",
+      "touch /home/${var.vm_username}/.packer-build-time"
     ]
   }
-  provisioner "shell" {
-    only            = ["virtualbox-iso.arch"]
-    execute_command = "sudo --preserve-env bash -c '{{ .Vars}} {{ .Path }} --noninteractive #--update-archlinux-keyring'"
-    script          = "common/http/arch/install-base.sh"
+
+  # --- POST-PROCESSING ---
+  # Package the final image into a Vagrant box.
+  post-processor "vagrant" {
+    output = "${var.output_location}packer-arch-libvirt-{{timestamp}}.box"
   }
 }

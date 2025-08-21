@@ -1,38 +1,50 @@
-#!/usr/bin/env bash
+#!/bin/bash
 #
-# Temporarily enables SSH during a liveboot (for Packer)
-#
-# Reference: https://github.com/conao3/packer-manjaro/blob/master/srv/enable-ssh.sh
+# This script is executed by Packer on the Arch Linux live ISO.
+# It idempotently configures a 'vagrant' user and enables SSH.
 
-set -e
-set -u
-set -x
+set -euxo pipefail # Exit on error, print commands, fail on unset variables
 
-: "${TEMP_SSH_USER:=user}"
-: "${TEMP_SSH_PASSWORD:=user}"
+# --- Configuration ---
+readonly TEMP_SSH_USER="vagrant"
+readonly TEMP_SSH_PASSWORD="vagrant"
 
-# --- Create temp user ---
+# --- Main Logic ---
 
-useradd \
-    --comment "$TEMP_SSH_USER" \
-    --create-home \
-    --user-group \
-    "$TEMP_SSH_USER"
+echo "==> Ensuring network is available..."
+until ping -c 1 1.1.1.1 &>/dev/null; do
+    echo "Network not ready, sleeping for 2 seconds..."
+    sleep 2
+done
 
-echo "${TEMP_SSH_USER}:${TEMP_SSH_PASSWORD}" | chpasswd \
-    --crypt-method SHA512
+echo "==> Creating user '${TEMP_SSH_USER}' if they do not exist..."
+# This is the idempotent check.
+if ! id -u "${TEMP_SSH_USER}" &>/dev/null; then
+    useradd --comment "${TEMP_SSH_USER}" --create-home --user-group "${TEMP_SSH_USER}"
+    echo "User '${TEMP_SSH_USER}' created."
+else
+    echo "User '${TEMP_SSH_USER}' already exists."
+fi
 
-echo -e "Defaults env_keep += \"SSH_AUTH_SOCK\"\n${TEMP_SSH_USER} ALL=(ALL) NOPASSWD: ALL" \
-    > /etc/sudoers.d/10_user
+echo "==> Setting password for '${TEMP_SSH_USER}'..."
+echo "${TEMP_SSH_USER}:${TEMP_SSH_PASSWORD}" | chpasswd --crypt-method SHA512
 
-chmod \
-    0440 \
-    /etc/sudoers.d/10_user
+echo "==> Configuring passwordless sudo for '${TEMP_SSH_USER}'..."
+# Ensure we create a clean sudoers file.
+echo "${TEMP_SSH_USER} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/10-vagrant
+chmod 0440 /etc/sudoers.d/10-vagrant
+visudo --check --strict
 
-visudo \
-    --check \
-    --strict
+echo "==> Installing and enabling SSH daemon..."
+# Refresh package databases and install OpenSSH if it's not already.
+pacman -Syy --noconfirm --needed openssh
 
-systemctl start sshd.service
+# Configure sshd for Packer's use case.
+sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+sed -i 's/#UseDNS yes/UseDNS no/' /etc/ssh/sshd_config
 
-echo "SSH temporarily enabled for Packer provisioning with creds: $TEMP_SSH_USER // $TEMP_SSH_PASSWORD"
+# Ensure the service is started and enabled.
+systemctl enable --now sshd.service
+
+echo "==> SSH setup complete. Packer should be able to connect."
