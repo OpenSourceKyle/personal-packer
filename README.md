@@ -9,42 +9,21 @@ Reference: [Packer Installation](https://learn.hashicorp.com/tutorials/packer/ge
 ```
 # Install Packer
 sudo pacman -S packer
-
-# Only necessary if running raw `packer` commands
-./run_first_time_setup.sh
 ```
 
 # Usage
 
 ## Quickstart Build
 
-Use the included `build_vm.sh` script to handle Packer; it runs `run_first_time_setup.sh` automatically. More advanced commands will need to be ran manually.
+```bash
+# QEMU Plugin
+packer plugins install github.com/hashicorp/qemu
 
-```shell
-./build_vm.sh --help
+# Normal
+packer build .
 
-./build_vm.sh vbox-arch
-./build_vm.sh qemu-arch 
-```
-
-# Troubleshooting Common Issues:
-
-Some simple solutions to common problems.
-
-## Packer deletes the VM on a failure
-
-Packer deletes a VM by default on failure instead of asking. By keeping the VM (that will stay running as well), triage can be possible to troubleshoot a build failure.
-
-```shell
-./build_vm.sh --ask <BUILD>
-```
-
-## Show debug output
-
-Packer only has debug output, which is similar to setting a verbosity option (e.g. `-v` or `--verbose`) in other programs.
-
-```shell
-./build_vm.sh --verbose <BUILD>
+# Debug
+PACKER_LOG=1 packer build -on-error=ask .
 ```
 
 * [Packer Docs](https://www.packer.io/docs)
