@@ -51,8 +51,6 @@ LUKS_PATH="/dev/mapper/${LUKS_CONTAINER}"
 LVM_VG='luks_root'
 LVM_LV_ROOT='root'
 LVM_ROOT_PATH="/dev/${LVM_VG}/${LVM_LV_ROOT}"
-LUKS_LVM_MKINITCPIO_HOOKS='HOOKS=(base udev autodetect keyboard keymap consolefont modconf block encrypt lvm2 filesystems fsck)'
-
 # END !!! === do NOT modify above vars === !!!
 
 # --- SCRIPT FUNCTIONS ---
@@ -142,7 +140,7 @@ done
 # --- Interactive Mode :: Safe Prompts ---
 
 # Show (only) script-set vars for validation
-echo "=== DEFINED VARIABLES FOR BULD ==="
+echo "=== DEFINED VARIABLES FOR BUILD ==="
 declare -p | diff --ed --ignore-matching-lines='PIPESTATUS' --ignore-matching-lines='_=' "$BEFORE_VARIABLES" - | grep 'declare' | awk '{print $3}'
 
 if [[ "$INTERACTIVE" -eq 1 ]] ; then
@@ -182,7 +180,7 @@ set -u
 
 # Unmount all drives from previous runs (just in case)
 set +e
-cryptsetup close "$LUKS_PATH"
+cryptsetup close "$LUKS_CONTAINER"
 umount -f "$DISK_PART_BOOT"
 umount -f "$DISK_PART_ROOT"
 set -e
@@ -260,9 +258,11 @@ fi
 # NOTE: Grub supports LUKS1 (LUKS2 not well-supported): https://wiki.archlinux.org/title/GRUB#Encrypted_/boot
 echo -n "${LUKS_PASSWORD}" | cryptsetup \
     luksFormat \
-    --type luks \
+    --type luks2 \
+    --pbkdf pbkdf2 \
     --force-password \
-    "${DISK_PART_ROOT}" -
+    "${DISK_PART_ROOT}" \
+    -
 echo -n "${LUKS_PASSWORD}" | cryptsetup \
     open \
     "${DISK_PART_ROOT}" \
@@ -303,12 +303,6 @@ LUKS_KERNEL_BOOT_PARAM="cryptdevice=UUID=${LUKS_DEVICE_UUID}:${LUKS_CONTAINER} r
 
 # === SYSTEM CONFIG ===
 
-ln --symbolic --force /usr/share/zoneinfo/${SET_TIMEZONE} /etc/localtime
-# Sync time
-timedatectl \
-    set-ntp true
-hwclock --systohc
-
 # Valid internet connection required
 ping -c 1 -W 10 1.1.1.1
 
@@ -337,7 +331,7 @@ yes | pacstrap "${CHROOT_MOUNT}" \
 
 # TODO: genfstab sometimes generates bad UUID for boot disk
 genfstab \
-    -t UUID \
+    -U \
     -p \
     "${CHROOT_MOUNT}" \
     > "${CHROOT_MOUNT}"/etc/fstab
@@ -346,10 +340,9 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
     echo ${SET_HOSTNAME} > /etc/hostname
     echo -e '127.0.0.1 localhost\n::1 localhost\n127.0.1.1 ${SET_HOSTNAME} $(echo ${SET_HOSTNAME} | cut --fields=1 --delimiter=. -)' > /etc/hosts
     ln --symbolic --force /usr/share/zoneinfo/${SET_TIMEZONE} /etc/localtime
-    #timedatectl set-ntp true
-    #sleep 10 && timedatectl status
-    #hwclock --systohc
-    echo SET_KEYMAP=${SET_KEYMAP} > /etc/vconsole.conf
+    timedatectl set-ntp true
+    hwclock --systohc
+    echo KEYMAP=${SET_KEYMAP} > /etc/vconsole.conf
     sed --in-place s/#${SET_LANGUAGE}/${SET_LANGUAGE}/ /etc/locale.gen
     locale-gen
     systemctl enable NetworkManager sshd
@@ -358,21 +351,24 @@ arch-chroot "${CHROOT_MOUNT}" bash -c "
     echo 'root:${ROOT_PASSWORD}' | chpasswd --crypt-method SHA512
 
     # Unprivileged User
-    echo '%wheel ALL=(ALL) ALL' | tee --append /etc/sudoers && visudo --check --strict
     useradd ${USER_NAME} --create-home --user-group --groups wheel
     echo '${USER_NAME}:${USER_PASSWORD}' | chpasswd --crypt-method SHA512
-"
+
+    # Create the sudoers file for the wheel group
+    echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/10-wheel-group
+    chmod 440 /etc/sudoers.d/10-wheel-group"
 
 # === BOOT ===
 
 # Regenerate mkinitcpio and install Grub
 arch-chroot "${CHROOT_MOUNT}" bash -c "
-    # Reconfigure mkinitcpio due to LUKS + LVM
-    sed --in-place 's/^\s*HOOKS.*/${LUKS_LVM_MKINITCPIO_HOOKS}/g' /etc/mkinitcpio.conf
+    # Reconfigure mkinitcpio due to LUKS + LVM (Robust Method)
+    # This safely adds 'encrypt' and 'lvm2' hooks without overwriting defaults
+    sed --in-place 's/\\(HOOKS=.*block\\)\\(.*\\)/\\1 encrypt lvm2\\2/' /etc/mkinitcpio.conf
     mkinitcpio --allpresets
 
     # Add kernel boot params for LUKS
-    sed --in-place 's#.*GRUB_CMDLINE_LINUX_DEFAULT.*#GRUB_CMDLINE_LINUX_DEFAULT=\"${LUKS_KERNEL_BOOT_PARAM}\"#g' /etc/default/grub
+    sed --in-place 's#.*GRUB_CMDLINE_LINUX_DEFAULT.*#GRUB_CMDLINE_LINUX_DEFAULT=\"${LUKS_KERNEL_BOOT_PARAM}\"#' /etc/default/grub
     # Install GRUB bootloader
     grub-install --recheck --modules='lvm part_gpt part_msdos' --target=${GRUB_TARGET} ${GRUB_INSTALL_PARAMS} ${DISK}
     grub-mkconfig --output ${BOOT_MOUNT}/grub/grub.cfg
