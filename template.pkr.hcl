@@ -11,7 +11,7 @@ locals {
   box_name      = "arch-box"
   box_version   = "1.0.0"
   box_provider  = "libvirt"
-  output_dir    = "output-arch"  # Match QEMU builder's default pattern
+  output_dir    = "output-arch"
   disk_size_gib = 40
 }
 
@@ -54,6 +54,6 @@ build {
     output           = "${local.output_dir}/${local.box_name}-${local.box_provider}-${local.box_version}.box"
     architecture     = "amd64"
     compression_level = 6
-    keep_input_artifact = true  # Keep QEMU artifacts for debugging
+    keep_input_artifact = true
   }
 }
