@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ArchScript Architect - Arch Linux automated installer
+# Arch Linux automated installer
 # - UEFI only
-# - Default: LUKS2 + LVM full-disk encryption
-# - Interactive (default) and non-interactive (--non-interactive)
+# - Default: LUKS + LVM full-disk encryption
 # - Optional keyring refresh (--update-keyring)
-# - Enable encryption with --disk-encryption [PASSWORD]
+# - Enable encryption with --disk-encryption (use --luks-password to set password)
+# - Interactive (default) and non-interactive (--non-interactive) for Vagrant VMs
+#
+# When `--non-interactive` is used, the installer additionally:
+# - Enables `PasswordAuthentication yes` in `sshd_config`
+# - Accepts `ssh-rsa` for initial Vagrant compatibility
+# - Installs the Vagrant insecure public key to `/home/vagrant/.ssh/authorized_keys`
+# - Grants passwordless sudo to the `wheel` group
+# This ensures `vagrant up` can connect and Ansible (or other provisioners) can take over securely.
+# Your configuration management can later harden SSH and sudo as desired.
 #
 # Major steps map to the official Arch Linux Installation Guide:
 # https://wiki.archlinux.org/title/Installation_guide
@@ -97,16 +105,17 @@ Modes:
   --non-interactive              Run fully automated using provided flags.
 Options:
   --disk /dev/sdX|/dev/nvme0n1  Target disk (optional, will auto-detect if not specified).
-  --hostname NAME               Hostname (default: arch).
+  --hostname NAME               Hostname.
   --user NAME                   Non-root user (default: prompt in interactive; 'vagrant' in non-interactive).
   --password PASS               Password for non-root user (default: prompt; 'vagrant' in non-interactive).
   --root-password PASS          Root password (default: prompt; 'vagrant' in non-interactive).
-  --disk-encryption [PASSWORD]   Enable LUKS + LVM with optional password (default: vagrant, encryption disabled by default).
+  --disk-encryption             Enable LUKS + LVM with optional password (encryption disabled by default).
+  --luks-password PASS          LUKS password (default: prompt; 'vagrant' in non-interactive).
   -u, --update-keyring          Refresh archlinux-keyring before install.
   -h, --help                    Show this help.
 
 Defaults for --non-interactive:
-  user=vagrant, password=vagrant, root password=vagrant, hostname=arch
+  user=$USERNAME, password=$USERPASS, root password=$ROOTPASS, luks password=$LUKS_PASSWORD, hostname=$HOSTNAME
 EOF
 }
 
@@ -120,7 +129,10 @@ while [[ $# -gt 0 ]]; do
     --root-password) ROOTPASS="${2:-}"; shift 2 ;;
     --disk-encryption) 
       ENCRYPTION=1
-      LUKS_PASSWORD="${2:-vagrant}"
+      shift
+      ;;
+    --luks-password)
+      LUKS_PASSWORD="${2:-}"
       shift 2
       ;;
     -u|--update-keyring) UPDATE_KEYRING=1; shift ;;
@@ -159,7 +171,7 @@ if (( ! NON_INTERACTIVE )); then
   warn "This will WIPE ALL DATA on $DISK and install Arch Linux."
   confirm_or_exit "Final confirmation"
   if (( ENCRYPTION )); then
-    info "Full-disk encryption is ENABLED. Use --disk-encryption to set password."
+    info "Full-disk encryption is ENABLED. Use --luks-password to set password."
     if [[ -z "$LUKS_PASSWORD" ]]; then
       LUKS_PASSWORD="$(prompt_secret "LUKS encryption password")"
     fi
