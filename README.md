@@ -19,11 +19,21 @@ sudo pacman -S packer
 # QEMU Plugin
 packer plugins install github.com/hashicorp/qemu
 
+# ===
+
 # Normal
 packer build .
 
 # Debug
 PACKER_LOG=1 packer build -on-error=ask .
+
+# ===
+
+# Add built image to Vagrant
+vagrant box add --name arch-box output-arch/arch-box-libvirt-1.0.0.box
+
+# Remove from Vagrant
+vagrant box remove my-arch-box
 ```
 
 * [Packer Docs](https://www.packer.io/docs)
