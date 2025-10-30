@@ -1,8 +1,8 @@
-# Packer
+## Packer
 
-Locally build Virtual Machines from-scratch using 1-command.
+Locally build an Arch Linux virtual machine from scratch with a single command.
 
-## Pre-requisites
+### Pre-requisites
 
 Reference: [Packer Installation](https://learn.hashicorp.com/tutorials/packer/get-started-install-cli)
 
@@ -11,31 +11,49 @@ Reference: [Packer Installation](https://learn.hashicorp.com/tutorials/packer/ge
 sudo pacman -S packer
 ```
 
-# Usage
+## Usage
 
-## Quickstart Build
+### Quickstart Build
 
 ```bash
 # QEMU Plugin
 packer plugins install github.com/hashicorp/qemu
 
-# Normal
-packer build .
+# Build
+packer build archlinux.pkr.hcl
 
-# Debug
+# Debug build
 PACKER_LOG=1 packer build -on-error=ask .
+
+# Add built image to Vagrant
+vagrant box add --name arch-box output-arch/arch-box-libvirt-*.box
+
+# Remove from Vagrant
+vagrant box remove arch-box
 ```
 
-* [Packer Docs](https://www.packer.io/docs)
+- **Packer Docs**: https://www.packer.io/docs
 
-## Packer Templates
+---
 
-Templates can be useful examples, and there are many such templates on the Internet. During my experimentation with using many of them, I learned the hard way that many do not work "out-of-the-box" and using the Packer documentation was much simpler than a poorly documented, old template. Be cautious for a few reasons:
+## Arch Installer Script: `install-base.sh`
 
-- some templates use the old template format in JSON instead of the newer HCL format
-- some templates might not work without a lot of variable configuration (because the templates are heavily parameterized)
-- some templates might not work because they are simply out-of-date with newer packer versions
+This repository includes a self-contained Arch Linux installer used by the Packer build and also suitable for manual installs from the official Arch ISO. Consult the beginning of the script and/or run `./install-base.sh --help` for a full list of options.
 
-* [Unofficial Packer Templates](https://github.com/chef/bento/tree/main/packer_templates)
-* [Arch Packer Template 1](https://github.com/conao3/packer-manjaro/blob/master/manjaro-template.json)
-* [Arch Packer Template 2](https://github.com/safenetwork-community/mai-in-a-box)
+### Examples
+
+- Interactive (prompts):
+```bash
+./install-base.sh
+```
+
+- Non-interactive with explicit disk and encryption:
+```bash
+./install-base.sh --non-interactive \
+  --disk /dev/vda \
+  --hostname myhost \
+  --user vagrant \
+  --password vagrant \
+  --root-password vagrant \
+  --disk-encryption mysecret
+```
