@@ -20,7 +20,7 @@ sudo pacman -S packer
 packer plugins install github.com/hashicorp/qemu
 
 # Build
-packer build .
+packer build archlinux.pkr.hcl
 
 # Debug build
 PACKER_LOG=1 packer build -on-error=ask .

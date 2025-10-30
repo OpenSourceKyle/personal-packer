@@ -9,7 +9,7 @@ packer {
 
 locals {
   box_name      = "arch-box"
-  box_version   = "1.0.0"
+  box_version   = "1.1"
   box_provider  = "libvirt"
   output_dir    = "output-arch"
   disk_size_gib = 40
@@ -31,10 +31,10 @@ source "qemu" "arch" {
   efi_firmware_code = "/usr/share/edk2/x64/OVMF_CODE.4m.fd"
   efi_firmware_vars = "/usr/share/edk2/x64/OVMF_VARS.4m.fd"
   boot_command = [
-    "<wait10s>", "fs0:\\efi\\boot\\bootx64.efi", "<enter>", "<wait5s>", "<enter>", "<wait45s>",
+    #"<wait10s>", "fs0:\\efi\\boot\\bootx64.efi", "<enter>", "<wait5s>", "<enter>", "<wait45s>",
     "curl -fsSL http://{{ .HTTPIP }}:{{ .HTTPPort }}/enable-ssh.sh | bash", "<enter>"
   ]
-  boot_wait        = "10s"
+  boot_wait        = "90s"
   shutdown_command = "echo 'vagrant' | sudo -S shutdown -P now"
   shutdown_timeout = "10m"
   communicator     = "ssh"
