@@ -26,7 +26,7 @@ packer build archlinux.pkr.hcl
 PACKER_LOG=1 packer build -on-error=ask .
 
 # Add built image to Vagrant
-vagrant box add --name arch-box output-arch/arch-box-libvirt-1.0.0.box
+vagrant box add --name arch-box output-arch/arch-box-libvirt-*.box
 
 # Remove from Vagrant
 vagrant box remove arch-box
