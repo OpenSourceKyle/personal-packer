@@ -20,8 +20,12 @@ source "qemu" "arch" {
   memory            = 4096
   disk_size         = local.disk_size_gib * 1024
   headless          = true
-  iso_url           = "https://mirrors.edge.kernel.org/archlinux/iso/latest/archlinux-x86_64.iso"
-  iso_checksum      = "file:https://mirrors.edge.kernel.org/archlinux/iso/latest/sha256sums.txt"
+  # US
+  #iso_url           = "https://mirrors.edge.kernel.org/archlinux/iso/latest/archlinux-x86_64.iso"
+  #iso_checksum      = "file:https://mirrors.edge.kernel.org/archlinux/iso/latest/sha256sums.txt"
+  # Mexico
+  iso_url           = "https://arch.jsc.mx/iso/2025.10.01/archlinux-x86_64.iso"
+  iso_checksum      = "file:https://arch.jsc.mx/iso/2025.10.01/sha256sums.txt"
   http_directory    = "."
   efi_boot          = true
   efi_firmware_code = "/usr/share/edk2/x64/OVMF_CODE.4m.fd"
