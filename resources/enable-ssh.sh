@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# This script is executed by Packer on the Arch Linux live ISO.
+# This script is executed by Packer on the live ISO (Arch Linux or Kali Linux).
 # It idempotently configures a 'vagrant' user and enables SSH.
 
 set -euxo pipefail # Exit on error, print commands, fail on unset variables
@@ -36,8 +36,22 @@ chmod 0440 /etc/sudoers.d/10-vagrant
 visudo --check --strict
 
 echo "==> Installing and enabling SSH daemon..."
-# Refresh package databases and install OpenSSH if it's not already.
-pacman -Syy --noconfirm --needed openssh
+# Detect OS and use appropriate package manager and service name
+if command -v pacman &> /dev/null; then
+    # Arch Linux
+    echo "==> Detected Arch Linux, using pacman..."
+    pacman -Syy --noconfirm --needed openssh
+    SSH_SERVICE="sshd.service"
+elif command -v apt &> /dev/null; then
+    # Debian/Ubuntu/Kali Linux
+    echo "==> Detected Debian-based distribution, using apt..."
+    apt update
+    apt install -y openssh-server
+    SSH_SERVICE="ssh.service"
+else
+    echo "ERROR: Unable to detect package manager (pacman or apt required)" >&2
+    exit 1
+fi
 
 # Configure sshd for Packer's use case.
 sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
@@ -45,6 +59,6 @@ sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd
 sed -i 's/#UseDNS yes/UseDNS no/' /etc/ssh/sshd_config
 
 # Ensure the service is started and enabled.
-systemctl enable --now sshd.service
+systemctl enable --now "${SSH_SERVICE}"
 
 echo "==> SSH setup complete. Packer should be able to connect."
